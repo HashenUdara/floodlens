@@ -231,3 +231,4 @@ artifacts/**/*
 ml/logs/
 ml/registry/
 ml/submissions/
+ml/catboost_info/
