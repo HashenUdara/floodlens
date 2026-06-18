@@ -17,6 +17,8 @@ class Settings:
     model_bundle_path = repo_root / "artifacts" / "flood-risk-v3" / "model_bundle.joblib"
     model_metadata_path = repo_root / "artifacts" / "flood-risk-v3" / "metadata.json"
     test_data_path = repo_root / "data" / "raw" / "test.csv"
+    backend_log_dir = repo_root / "backend" / "logs"
+    prediction_log_path = backend_log_dir / "predictions.jsonl"
 
 
 settings = Settings()
