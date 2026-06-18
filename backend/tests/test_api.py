@@ -107,3 +107,71 @@ def test_monitoring_summary_counts_logged_predictions(temp_log_service):
     assert body["latest_prediction_at"] is not None
     assert body["model_versions"] == {"flood-risk-v3": 2}
     assert body["top_districts_by_predictions"]
+
+
+def test_districts_returns_sorted_dataset_districts():
+    response = client.get("/districts")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body == sorted(body)
+    assert "Kilinochchi" in body
+    assert "Matale" in body
+
+
+def test_locations_returns_location_rows_with_coordinates():
+    response = client.get("/locations", params={"limit": 2})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert len(body) == 2
+    first = body[0]
+    assert first["record_id"] == "F104559"
+    assert first["district"] == "Kilinochchi"
+    assert first["place_name"] == "Kudakumbura South"
+    assert isinstance(first["latitude"], float)
+    assert isinstance(first["longitude"], float)
+    assert "rainfall_7d_mm" in first
+    assert "distance_to_river_m" in first
+
+
+def test_locations_filters_by_district():
+    response = client.get("/locations", params={"district": "Kilinochchi", "limit": 25})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body
+    assert {row["district"] for row in body} == {"Kilinochchi"}
+
+
+def test_locations_search_matches_record_place_or_district():
+    response = client.get("/locations", params={"search": "Kudakumbura", "limit": 10})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body
+    assert any(row["record_id"] == "F104559" for row in body)
+
+
+def test_locations_limit_is_bounded():
+    response = client.get("/locations", params={"limit": 1})
+
+    assert response.status_code == 200
+    assert len(response.json()) == 1
+
+
+def test_location_record_returns_full_prediction_payload():
+    response = client.get("/locations/F104559/record")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["record_id"] == "F104559"
+    assert body["district"] == "Kilinochchi"
+    assert "reason_not_good_to_live" in body
+    assert "generation_date" in body
+
+
+def test_location_record_returns_404_for_unknown_record():
+    response = client.get("/locations/not-a-record/record")
+
+    assert response.status_code == 404

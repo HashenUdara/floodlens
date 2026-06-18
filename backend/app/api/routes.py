@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel, ConfigDict
 
 from app.core.settings import settings
+from app.services.location_service import LocationService, get_location_service
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
 from app.services.predictor_service import PredictorService, get_predictor_service
 
@@ -46,3 +47,26 @@ def monitoring_summary(
     log_service: PredictionLogService = Depends(get_prediction_log_service),
 ) -> dict[str, Any]:
     return log_service.summary()
+
+
+@router.get("/districts")
+def districts(service: LocationService = Depends(get_location_service)) -> list[str]:
+    return service.districts()
+
+
+@router.get("/locations")
+def locations(
+    district: str | None = None,
+    search: str | None = None,
+    limit: int = 250,
+    service: LocationService = Depends(get_location_service),
+) -> list[dict[str, Any]]:
+    return service.locations(district=district, search=search, limit=limit)
+
+
+@router.get("/locations/{record_id}/record")
+def location_record(
+    record_id: str,
+    service: LocationService = Depends(get_location_service),
+) -> dict[str, Any]:
+    return service.record(record_id)
