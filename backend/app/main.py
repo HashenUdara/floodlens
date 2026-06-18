@@ -1,5 +1,8 @@
-"""FastAPI application shell for the future FloodLens backend."""
+"""FastAPI application for serving FloodLens model predictions."""
 
 from fastapi import FastAPI
 
+from app.api.routes import router
+
 app = FastAPI(title="FloodLens API", version="0.1.0")
+app.include_router(router)
