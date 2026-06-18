@@ -309,12 +309,12 @@ export default function Home() {
                   Flood Risk Intelligence Dashboard
                 </h1>
                 <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                  Model serving, location exploration, and prediction monitoring
-                  for Sri Lanka flood risk operations.
+                  Business-ready flood intelligence for monitored communities,
+                  assets, and response planning across Sri Lanka.
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm sm:flex">
-                <StatusPill label="Explorer rows" value={locations.length.toString()} />
+                <StatusPill label="Monitored places" value={locations.length.toString()} />
                 <StatusPill
                   label="Logged events"
                   value={`${monitoring?.total_predictions ?? 0}`}
@@ -693,7 +693,7 @@ function RiskExplorer({
         },
         geometry: {
           type: "Point",
-          coordinates: [location.longitude, location.latitude],
+          coordinates: [location.map_longitude, location.map_latitude],
         },
       })),
     }),
@@ -710,16 +710,16 @@ function RiskExplorer({
         <Card>
           <CardHeader className="gap-3">
             <div>
-              <CardTitle>Risk explorer</CardTitle>
+              <CardTitle>Monitored places explorer</CardTitle>
               <CardDescription>
-                Filter real test locations, inspect context, and run selected
-                rows through the model API.
+                Explore operational places under watch, inspect risk drivers,
+                and run selected assets through the model API.
               </CardDescription>
             </div>
             <CardAction className="flex flex-wrap gap-2">
               <Badge variant="outline" className="gap-1.5">
                 <Layers3 className="size-3" />
-                {locations.length} locations
+                {locations.length} monitored places
               </Badge>
               <Badge variant="outline" className="gap-1.5">
                 <Filter className="size-3" />
@@ -764,6 +764,16 @@ function RiskExplorer({
                 </div>
               </div>
             </div>
+
+            <Alert>
+              <ShieldCheck className="size-4" />
+              <AlertTitle>Business layer active</AlertTitle>
+              <AlertDescription>
+                The current CSV is treated as a seed provider. The map uses
+                corrected district presentation coordinates, while risk drivers,
+                priority, and recommendations are computed before any model call.
+              </AlertDescription>
+            </Alert>
 
             <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
               <SriLankaRiskMap
@@ -840,15 +850,18 @@ function SriLankaRiskMap({
         {selectedLocation ? (
           <>
             <MapMarker
-              longitude={selectedLocation.longitude}
-              latitude={selectedLocation.latitude}
+              longitude={selectedLocation.map_longitude}
+              latitude={selectedLocation.map_latitude}
               onClick={() => onSelectLocation(selectedLocation.record_id)}
             >
               <MarkerContent>
                 <div
                   className={cn(
                     "relative size-5 rounded-full border-2 border-background shadow-lg ring-4",
-                    riskMarkerClass(selectedPrediction?.risk_level)
+                    riskMarkerClass(
+                      selectedPrediction?.risk_level ??
+                        selectedLocation.baseline_risk_level
+                    )
                   )}
                 />
               </MarkerContent>
@@ -857,8 +870,8 @@ function SriLankaRiskMap({
               </MarkerTooltip>
             </MapMarker>
             <MapPopup
-              longitude={selectedLocation.longitude}
-              latitude={selectedLocation.latitude}
+              longitude={selectedLocation.map_longitude}
+              latitude={selectedLocation.map_latitude}
               closeButton
               className="w-64"
             >
@@ -877,9 +890,12 @@ function SriLankaRiskMap({
                     <RiskBadge level={selectedPrediction.risk_level} />
                   </div>
                 ) : (
-                  <p className="text-xs text-muted-foreground">
-                    Select Predict to score this location.
-                  </p>
+                  <div className="flex items-center justify-between gap-3">
+                    <span className="font-mono text-lg">
+                      {selectedLocation.baseline_risk_score.toFixed(4)}
+                    </span>
+                    <RiskBadge level={selectedLocation.baseline_risk_level} />
+                  </div>
                 )}
               </div>
             </MapPopup>
@@ -896,10 +912,10 @@ function SriLankaRiskMap({
       <div className="pointer-events-none absolute left-3 top-3 rounded-lg border border-border bg-background/90 px-3 py-2 text-xs shadow-sm backdrop-blur">
         <div className="flex items-center gap-2 text-muted-foreground">
           <LocateFixed className="size-3.5 text-cyan-300" />
-          Sri Lanka operational layer
+          Sri Lanka monitored places layer
         </div>
         <div className="mt-1 font-mono text-foreground">
-          {locations.length.toLocaleString()} visible points
+          {locations.length.toLocaleString()} corrected map points
         </div>
       </div>
     </div>
@@ -931,19 +947,47 @@ function LocationInspector({
         <div>
           <div className="font-medium">{location.place_name}</div>
           <div className="mt-1 font-mono text-xs text-muted-foreground">
-            {location.record_id}
+            {location.record_id} / {location.asset_type}
           </div>
         </div>
-        {prediction ? <RiskBadge level={prediction.risk_level} /> : null}
+        <RiskBadge level={prediction?.risk_level ?? location.baseline_risk_level} />
       </div>
 
       <Separator className="my-4" />
 
+      <div className="mb-4 rounded-lg border border-border p-3">
+        <div className="flex items-center justify-between gap-3">
+          <span className="text-xs text-muted-foreground">Operational priority</span>
+          <Badge variant="outline">{location.operational_priority}</Badge>
+        </div>
+        <div className="mt-2 flex items-end justify-between gap-3">
+          <div>
+            <div className="font-mono text-3xl font-semibold">
+              {(prediction?.flood_risk_score ?? location.baseline_risk_score).toFixed(4)}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {prediction ? "Model-assisted score" : "Baseline signal score"}
+            </div>
+          </div>
+          <div className="text-right text-xs text-muted-foreground">
+            {prediction?.model_version ?? "provider baseline"}
+          </div>
+        </div>
+      </div>
+
       <div className="grid gap-2 text-sm">
         <InfoLine label="District" value={location.district} />
         <InfoLine
-          label="Coordinates"
-          value={`${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`}
+          label="Map coordinates"
+          value={`${location.map_latitude.toFixed(4)}, ${location.map_longitude.toFixed(4)}`}
+        />
+        <InfoLine
+          label="Raw data coordinates"
+          value={`${location.raw_latitude.toFixed(4)}, ${location.raw_longitude.toFixed(4)}`}
+        />
+        <InfoLine
+          label="Coordinate source"
+          value={location.coordinate_source.replaceAll("_", " ")}
         />
         <InfoLine label="Rainfall 7d" value={formatUnit(location.rainfall_7d_mm, "mm")} />
         <InfoLine label="Elevation" value={formatUnit(location.elevation_m, "m")} />
@@ -960,19 +1004,26 @@ function LocationInspector({
 
       <Separator className="my-4" />
 
-      {prediction ? (
-        <div className="mb-4 rounded-lg border border-border p-3">
-          <div className="text-xs text-muted-foreground">Latest selected score</div>
-          <div className="mt-1 flex items-end justify-between gap-3">
-            <div className="font-mono text-3xl font-semibold">
-              {prediction.flood_risk_score.toFixed(4)}
-            </div>
-            <div className="text-right text-xs text-muted-foreground">
-              {prediction.model_version}
-            </div>
+      <div className="mb-4 space-y-3">
+        <div>
+          <div className="mb-2 text-xs text-muted-foreground">Risk drivers</div>
+          <div className="flex flex-wrap gap-2">
+            {location.risk_drivers.length ? (
+              location.risk_drivers.map((driver) => (
+                <Badge key={driver} variant="outline">
+                  {driver}
+                </Badge>
+              ))
+            ) : (
+              <Badge variant="outline">No strong driver</Badge>
+            )}
           </div>
         </div>
-      ) : null}
+        <div className="rounded-lg border border-border p-3 text-sm">
+          <div className="mb-1 text-xs text-muted-foreground">Recommended action</div>
+          <p>{location.recommended_action}</p>
+        </div>
+      </div>
 
       <Button
         type="button"
@@ -1009,10 +1060,11 @@ function RiskTable({
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           <Table2 className="size-4 text-cyan-300" />
-          Location risk table
+          Operational risk queue
         </CardTitle>
         <CardDescription>
-          Select a row to sync the map and run an on-demand prediction.
+          Prioritize monitored places using baseline signals, then run the model
+          where a decision needs more confidence.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -1027,7 +1079,8 @@ function RiskTable({
                 <TableHead className="text-right">Elevation</TableHead>
                 <TableHead className="text-right">River</TableHead>
                 <TableHead className="text-right">Evac</TableHead>
-                <TableHead>Risk</TableHead>
+                <TableHead>Baseline</TableHead>
+                <TableHead>Priority</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -1035,7 +1088,7 @@ function RiskTable({
               {loading ? (
                 Array.from({ length: 8 }).map((_, index) => (
                   <TableRow key={index}>
-                    <TableCell colSpan={9}>
+                    <TableCell colSpan={10}>
                       <Skeleton className="h-7 w-full" />
                     </TableCell>
                   </TableRow>
@@ -1076,8 +1129,11 @@ function RiskTable({
                         {prediction ? (
                           <RiskBadge level={prediction.risk_level} />
                         ) : (
-                          <Badge variant="outline">Unscored</Badge>
+                          <RiskBadge level={location.baseline_risk_level} />
                         )}
+                      </TableCell>
+                      <TableCell>
+                        <Badge variant="outline">{location.operational_priority}</Badge>
                       </TableCell>
                       <TableCell className="text-right">
                         <Button
@@ -1099,7 +1155,7 @@ function RiskTable({
                 })
               ) : (
                 <TableRow>
-                  <TableCell colSpan={9} className="h-24 text-center text-muted-foreground">
+                  <TableCell colSpan={10} className="h-24 text-center text-muted-foreground">
                     No matching locations.
                   </TableCell>
                 </TableRow>

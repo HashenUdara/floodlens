@@ -131,8 +131,19 @@ def test_locations_returns_location_rows_with_coordinates():
     assert first["place_name"] == "Kudakumbura South"
     assert isinstance(first["latitude"], float)
     assert isinstance(first["longitude"], float)
+    assert first["raw_latitude"] == first["latitude"]
+    assert first["raw_longitude"] == first["longitude"]
+    assert first["map_latitude"] != first["latitude"]
+    assert first["map_longitude"] != first["longitude"]
+    assert first["coordinate_source"] == "district_centroid_corrected"
     assert "rainfall_7d_mm" in first
     assert "distance_to_river_m" in first
+    assert first["data_provider"] == "seed_csv_provider"
+    assert first["baseline_risk_level"] in {"Low", "Medium", "High"}
+    assert 0 <= first["baseline_risk_score"] <= 1
+    assert first["operational_priority"] in {"Routine", "Watch", "Elevated", "Critical"}
+    assert first["recommended_action"]
+    assert isinstance(first["risk_drivers"], list)
 
 
 def test_locations_filters_by_district():
