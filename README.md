@@ -17,6 +17,7 @@ system.
 - [Product and business document](docs/floodlens_product_document.md)
 - [Presentation slide content and demo script](docs/floodlens_presentation_content.md)
 - [Zero-to-hero setup guide](docs/setup_guide.md)
+- [100/100 readiness roadmap and progress tracker](docs/winning_roadmap.md)
 
 ## Product Positioning
 
