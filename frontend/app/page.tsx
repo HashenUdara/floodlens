@@ -47,6 +47,7 @@ import {
   MobileHeader,
   NAV_ITEMS,
 } from "@/components/dashboard/shell"
+import { CopilotPanel } from "@/components/dashboard/copilot-panel"
 import { DistrictCommandPanel, PriorityQueuePanel } from "@/components/dashboard/decision-panels"
 import { RiskExplorer } from "@/components/dashboard/risk-explorer"
 import {
@@ -510,6 +511,10 @@ export default function Home() {
                   feedbackSummary={feedbackSummary}
                   driftSummary={driftSummary}
                 />
+              </TabsContent>
+
+              <TabsContent value="copilot">
+                <CopilotPanel />
               </TabsContent>
             </Tabs>
           </div>

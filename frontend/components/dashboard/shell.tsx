@@ -2,6 +2,7 @@ import { ReactNode } from "react"
 import {
   Activity,
   BarChart3,
+  BrainCircuit,
   Building2,
   ListChecks,
   MapPinned,
@@ -36,6 +37,7 @@ export const NAV_ITEMS: Array<{
   { value: "priority", label: "Priority Queue", icon: <ListChecks /> },
   { value: "prediction", label: "Model Serving", icon: <Play /> },
   { value: "monitoring", label: "Model Operations", icon: <BarChart3 /> },
+  { value: "copilot", label: "Intelligent Copilot", icon: <BrainCircuit /> },
 ]
 
 export function DashboardSidebar({

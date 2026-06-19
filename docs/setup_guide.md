@@ -137,10 +137,16 @@ Create or confirm the frontend environment file:
 ```bash
 cat > frontend/.env.local <<'EOF'
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+OPENAI_API_KEY=replace-with-your-openai-api-key
+OPENAI_MODEL=gpt-5.5
+NEXT_PUBLIC_OPENAI_MODEL_LABEL=gpt-5.5
 EOF
 ```
 
-This tells the Next.js dashboard where the FastAPI backend is running.
+`NEXT_PUBLIC_API_BASE_URL` tells the Next.js dashboard where the FastAPI backend
+is running. `OPENAI_API_KEY` and `OPENAI_MODEL` enable FloodLens Intelligent
+Copilot through the direct OpenAI provider. Use `OPENAI_MODEL=gpt-5.4-mini` for
+cheaper local rehearsals if needed.
 
 ## 7. Verify The Setup
 
@@ -371,6 +377,8 @@ Make sure `frontend/.env.local` contains:
 
 ```text
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+OPENAI_API_KEY=replace-with-your-openai-api-key
+OPENAI_MODEL=gpt-5.5
 ```
 
 Restart `pnpm dev` after changing `.env.local`.

@@ -9,6 +9,7 @@ export type ActiveView =
   | "priority"
   | "prediction"
   | "monitoring"
+  | "copilot"
 
 export type LocationFeatureProperties = {
   record_id: string

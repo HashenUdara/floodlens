@@ -49,6 +49,7 @@ The repository already contains a working MLOps foundation:
 - provider-backed district and priority intelligence
 - batch model scoring with latest model score storage
 - feedback capture and drift/retraining monitoring
+- OpenAI-powered Intelligent Copilot in the Next.js dashboard
 - split dashboard component structure under `frontend/components/dashboard/`
 
 Implemented backend APIs:
@@ -139,13 +140,11 @@ aggregation, prioritization, feedback, drift monitoring, and a grounded Copilot.
 
 The highest-impact missing pieces are:
 
-1. **FloodLens Intelligent Copilot**
-   - `POST /copilot`
-   - GPT-powered answers grounded in internal FloodLens tools
-   - summarizes district risk, location drivers, priority queues, model
-     monitoring, feedback, and drift state
-   - becomes RAG-ready for uploaded SOPs, field reports, policies, and response
-     documents.
+1. **Document RAG Extension**
+   - uploaded SOPs, field reports, policies, and response documents
+   - embeddings and pgvector retrieval
+   - cited answers that combine document evidence with FloodLens model,
+     monitoring, feedback, and drift data.
 
 2. **Deployment and CI Evidence**
    - GitHub Actions
@@ -172,6 +171,13 @@ Completed high-impact pieces:
    - `POST /batch-predict`
    - score many monitored places and store latest model-assisted score
    - proves realistic workload handling and gives monitoring richer events.
+
+4. **FloodLens Intelligent Copilot**
+   - OpenAI GPT-powered Copilot through the direct OpenAI provider
+   - Vercel AI SDK streaming route in Next.js
+   - AI Elements chat UI
+   - tool calls to internal FloodLens APIs for district, priority, score,
+     feedback, monitoring, and drift evidence.
 
 ## Ultimate UX Plan
 
@@ -403,10 +409,10 @@ Acceptance criteria status:
 - backend tests cover feedback writes, validation failures, summary counts,
   retraining candidate status, and drift summaries.
 
-### Phase 4: FloodLens Intelligent Copilot
+### Phase 4A: FloodLens Intelligent Copilot — Complete
 
-Add the final intelligence layer after the decision APIs, batch scoring,
-feedback loop, and drift monitoring exist.
+Implemented the final intelligence layer after the decision APIs, batch scoring,
+feedback loop, and drift monitoring.
 
 Positioning:
 
@@ -438,18 +444,14 @@ Rules:
 
 Technical direction:
 
-- Use OpenAI GPT for reasoning and final response generation.
-- Use Vercel AI SDK for the streaming chat UI and structured tool calls.
-- Keep FastAPI as the ML and decision backend.
-- Start with tool-grounded answers from existing APIs.
-- Add document RAG after the tool-grounded Copilot works:
-  - uploaded PDFs/SOPs/field reports
-  - chunking and embeddings
-  - Postgres with pgvector
-  - cited answers that combine retrieved documents with FloodLens model and
-    monitoring data.
+- Uses OpenAI GPT through `@ai-sdk/openai`; no Vercel AI Gateway.
+- Uses Vercel AI SDK `ToolLoopAgent` and a Next.js streaming API route.
+- Uses AI Elements for conversation, message, prompt input, suggestions,
+  source display, and collapsible tool evidence.
+- Keeps FastAPI as the ML and decision backend.
+- Starts with tool-grounded answers from existing APIs.
 
-Acceptance criteria:
+Acceptance criteria status:
 
 - Copilot supports predefined grounded intents first:
   - explain location
@@ -462,8 +464,19 @@ Acceptance criteria:
 - unsupported questions receive safe limitation language.
 - Copilot does not call the model directly when existing decision APIs already
   provide the required facts.
-- RAG is framed as a document intelligence extension, not as the source of model
-  predictions.
+
+### Phase 4B: Document RAG Extension
+
+Add document intelligence after the tool-grounded Copilot works:
+
+- uploaded PDFs/SOPs/field reports
+- chunking and embeddings
+- Postgres with pgvector
+- cited answers that combine retrieved documents with FloodLens model,
+  monitoring, feedback, and drift data
+
+RAG is framed as a document intelligence extension, not as the source of model
+predictions.
 
 ### Phase 5: Deployment and CI/CD Polish
 
@@ -565,6 +578,9 @@ Frontend default backend URL:
 
 ```text
 NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+OPENAI_API_KEY=replace-with-your-openai-api-key
+OPENAI_MODEL=gpt-5.5
+NEXT_PUBLIC_OPENAI_MODEL_LABEL=gpt-5.5
 ```
 
 Run frontend checks:
