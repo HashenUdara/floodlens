@@ -38,16 +38,24 @@ The repository already contains a working MLOps foundation:
 - interactive Sri Lanka map using MapLibre/mapcn
 - monitored-place explorer with district filter, table, inspector, baseline
   risk, risk drivers, priority, and recommended action
+- provider-backed district and priority intelligence
+- batch model scoring with latest model score storage
+- split dashboard component structure under `frontend/components/dashboard/`
 
 Implemented backend APIs:
 
 - `GET /health`
 - `GET /model-info`
 - `POST /predict`
+- `POST /batch-predict`
 - `GET /monitoring/summary`
+- `GET /model-scores`
 - `GET /districts`
 - `GET /locations`
 - `GET /locations/{record_id}/record`
+- `GET /district-summary`
+- `GET /high-risk-locations`
+- `GET /emergency-priority`
 
 Current business layer:
 
@@ -57,11 +65,12 @@ Current business layer:
   coordinates for the map
 - computes baseline risk before model prediction
 - exposes risk drivers, operational priority, asset type, and recommended action
-- keeps model-assisted scoring available through `POST /predict`
+- keeps model-assisted scoring available through `POST /predict` and
+  `POST /batch-predict`
 
 ## Current Code Analysis
 
-The current backend has three useful service boundaries:
+The current backend has useful service boundaries:
 
 - `PredictorService`: loads the saved ML bundle once and serves predictions.
 - `PredictionLogService`: appends successful predictions to JSONL and returns
@@ -69,8 +78,14 @@ The current backend has three useful service boundaries:
 - `LocationService`: reads seed data, converts rows into business-facing
   monitored places, fixes map presentation coordinates, and computes baseline
   decision signals.
+- `DecisionIntelligenceService`: aggregates district summaries, high-risk
+  rankings, and emergency priority queues.
+- `BatchScoringService`: scores visible or filtered monitored places through
+  the saved ML bundle.
+- `ModelScoreStore`: persists the latest model-assisted score per monitored
+  place in a lightweight JSON store.
 
-The frontend already has the correct product direction:
+The frontend has been split into focused dashboard components:
 
 - dark operational dashboard shell
 - sidebar navigation
@@ -81,11 +96,12 @@ The frontend already has the correct product direction:
 - selected-place inspector
 - prediction tester
 - monitoring view
+- District Command and Priority Queue views
+- baseline versus model score comparison
+- component modules under `frontend/components/dashboard/`
 
-The most important gap is that decision intelligence is still local to each
-location. The next step is to aggregate this intelligence across districts and
-prioritized queues so FloodLens feels like a real command platform instead of a
-single-location explorer.
+The most important remaining gap is now the learning loop: feedback capture,
+drift monitoring, and retraining signals.
 
 ## Winning Readiness Against Judging Criteria
 
@@ -96,13 +112,32 @@ aggregation, prioritization, feedback, drift monitoring, and a grounded Copilot.
 
 | Judging Area | Current Readiness | What Exists | Missing To Maximize Score |
 | --- | --- | --- | --- |
-| Scenario Understanding & Solution Design (20%) | Strong | Clear flood-risk decision-support product, monitored-place layer, recommended actions, limitations stated | District-level command view and final demo story tied to response planning |
-| Technical Implementation (30%) | Strong foundation | Feature engineering pipeline, ensemble model artifact, FastAPI serving, frontend dashboard, tests | Decision APIs, batch scoring, provider abstraction, richer evaluation/priority outputs |
+| Scenario Understanding & Solution Design (20%) | Strong | Clear flood-risk decision-support product, monitored-place layer, recommended actions, district command views, limitations stated | Final demo story tied tightly to response planning |
+| Technical Implementation (30%) | Strong | Feature engineering pipeline, ensemble model artifact, FastAPI serving, provider layer, decision APIs, batch scoring, frontend dashboard, tests | Richer evaluation/priority outputs and final polish |
 | MLOps & Production Readiness (25%) | Partial | model bundle, metadata, API serving, prediction logs, monitoring summary, tests | feedback loop, drift summary, CI/CD, Docker verification, retraining trigger story |
-| Innovation & Problem Solving (10%) | Partial | business risk drivers, corrected presentation coordinates, operational priority | grounded Copilot, district reports, emergency priority workflow |
+| Innovation & Problem Solving (10%) | Good | business risk drivers, corrected presentation coordinates, operational priority, district command and emergency priority workflow | grounded Copilot and district reports |
 | Viva Evaluation (15%) | Good but needs polish | architecture rationale and README positioning | final architecture diagram, demo script, trade-off notes, known limitation answers |
 
 The highest-impact missing pieces are:
+
+1. **Feedback + Drift Monitoring**
+   - `POST /feedback`
+   - `GET /monitoring/drift`
+   - capture observed outcomes, user confidence, drift status, and retraining
+     candidate state.
+
+2. **Grounded Flood Copilot**
+   - `POST /copilot`
+   - calls internal data tools instead of guessing
+   - answers district, location, priority, report, and monitoring questions.
+
+3. **Deployment and CI Evidence**
+   - GitHub Actions
+   - Docker Compose verification
+   - architecture diagram and final demo flow
+   - makes the project easy to defend in viva.
+
+Completed high-impact pieces:
 
 1. **Decision Intelligence APIs**
    - `GET /district-summary`
@@ -121,23 +156,6 @@ The highest-impact missing pieces are:
    - `POST /batch-predict`
    - score many monitored places and store latest model-assisted score
    - proves realistic workload handling and gives monitoring richer events.
-
-4. **Feedback + Drift Monitoring**
-   - `POST /feedback`
-   - `GET /monitoring/drift`
-   - capture observed outcomes, user confidence, drift status, and retraining
-     candidate state.
-
-5. **Grounded Flood Copilot**
-   - `POST /copilot`
-   - calls internal data tools instead of guessing
-   - answers district, location, priority, report, and monitoring questions.
-
-6. **Deployment and CI Evidence**
-   - GitHub Actions
-   - Docker Compose verification
-   - architecture diagram and final demo flow
-   - makes the project easy to defend in viva.
 
 ## Ultimate UX Plan
 
@@ -272,9 +290,9 @@ MLOps direction:
 Build order matters. The next work should maximize visible business value while
 also improving architecture and MLOps depth.
 
-### Phase 1: Provider-Backed Decision Intelligence
+### Phase 1: Provider-Backed Decision Intelligence — Complete
 
-Build the highest-value next layer:
+Implemented:
 
 - introduce a provider interface so backend logic no longer depends directly on
   CSV internals
@@ -296,7 +314,7 @@ Why this matters:
 - grounded data foundation for the Copilot
 - turns prediction into prioritization
 
-Acceptance criteria:
+Acceptance criteria status:
 
 - `/district-summary` returns district count, average baseline risk, high-risk
   count, critical/elevated priority count, and top drivers.
@@ -308,15 +326,17 @@ Acceptance criteria:
   explanatory text.
 - backend tests cover sorting, filtering, and empty/default behavior.
 
-### Phase 2: Batch Scoring
+### Phase 2: Batch Scoring — Complete
 
-Add model scoring at operational scale:
+Implemented:
 
 - `POST /batch-predict`
-- score all filtered monitored places
+- score filtered monitored places or explicit visible `record_ids`
 - persist latest model score per location in a lightweight store
+- expose latest scores with `GET /model-scores`
 - show model score vs baseline score
 - update district and priority views from scored results
+- source-aware monitoring for single versus batch predictions
 
 Why this matters:
 
@@ -324,12 +344,13 @@ Why this matters:
 - shows the system can support planning workflows
 - creates richer monitoring data
 
-Acceptance criteria:
+Acceptance criteria status:
 
-- `POST /batch-predict` accepts filters such as district and limit.
+- `POST /batch-predict` accepts district, limit, and explicit `record_ids`.
 - the API returns per-location model score, risk level, and model version.
 - batch predictions are logged with source `batch`.
-- frontend can run batch scoring for the current district.
+- frontend can run batch scoring for visible District Command and Priority Queue
+  rows.
 - monitoring summary includes single vs batch prediction counts.
 
 ### Phase 3: Feedback and Monitoring Upgrade

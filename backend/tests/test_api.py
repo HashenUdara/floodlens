@@ -335,6 +335,23 @@ def test_batch_predict_caps_limit_and_handles_unknown_district(temp_runtime_serv
     assert body["predictions"] == []
 
 
+def test_batch_predict_scores_record_ids_across_districts(temp_runtime_services):
+    rows = pd.read_csv(settings.test_data_path)
+    record_ids = [
+        rows[rows["district"].astype(str) == "Kilinochchi"].iloc[0]["record_id"],
+        rows[rows["district"].astype(str) == "Colombo"].iloc[0]["record_id"],
+    ]
+
+    response = client.post("/batch-predict", json={"record_ids": record_ids, "limit": 2})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["requested"] == 2
+    assert body["scored"] == 2
+    assert {item["record_id"] for item in body["predictions"]} == set(record_ids)
+    assert {item["district"] for item in body["predictions"]} == {"Kilinochchi", "Colombo"}
+
+
 def test_monitoring_summary_tracks_single_and_batch_sources(temp_runtime_services):
     rows = pd.read_csv(settings.test_data_path, nrows=1)
     response = client.post("/predict", json={"record": rows.iloc[0].to_dict()})

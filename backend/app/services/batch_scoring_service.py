@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 from typing import Any
+from uuid import uuid4
 
 from app.services.location_service import MonitoredLocationProvider
 from app.services.model_score_store import ModelScoreStore
@@ -105,7 +106,7 @@ class BatchScoringService:
             return self.provider.locations(district=district, limit=limit)
 
         wanted = set(record_ids)
-        locations = self.provider.locations(district=district, limit=500)
+        locations = self._candidate_locations(district)
         exact_matches = [
             location
             for location in locations
@@ -113,10 +114,20 @@ class BatchScoringService:
         ]
         return exact_matches[:limit]
 
+    def _candidate_locations(self, district: str | None) -> list[dict[str, Any]]:
+        if district:
+            return self.provider.locations(district=district, limit=500)
+
+        locations = []
+        for item in self.provider.districts():
+            locations.extend(self.provider.locations(district=item, limit=500))
+        return locations
+
 
 def _timestamp() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
 def _batch_id() -> str:
-    return f"batch-{datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%SZ')}"
+    timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    return f"batch-{timestamp}-{uuid4().hex[:8]}"
