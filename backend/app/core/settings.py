@@ -20,6 +20,7 @@ class Settings:
     backend_log_dir = repo_root / "backend" / "logs"
     prediction_log_path = backend_log_dir / "predictions.jsonl"
     latest_scores_path = backend_log_dir / "latest_scores.json"
+    feedback_log_path = backend_log_dir / "feedback.jsonl"
 
 
 settings = Settings()

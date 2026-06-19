@@ -32,6 +32,63 @@ export type MonitoringSummary = {
   }>
 }
 
+export type FeedbackRating = "useful" | "not_useful"
+export type ObservedOutcome = "flooded" | "not_flooded" | "unknown"
+
+export type FeedbackEvent = {
+  timestamp: string
+  record_id: string
+  district: string | null
+  place_name: string | null
+  model_version: string
+  rating: FeedbackRating
+  observed_outcome: ObservedOutcome
+  notes: string | null
+  source: "dashboard" | "api"
+  flood_risk_score: number | null
+  risk_level: "Low" | "Medium" | "High" | null
+  disagreement: boolean
+}
+
+export type FeedbackSummary = {
+  total_feedback: number
+  useful_count: number
+  not_useful_count: number
+  observed_flood_count: number
+  observed_no_flood_count: number
+  disagreement_count: number
+  disagreement_rate: number
+  latest_feedback_at: string | null
+  retraining_candidate: boolean
+  top_feedback_districts: Array<{
+    district: string
+    count: number
+  }>
+}
+
+export type DriftSummary = {
+  status: "insufficient_data" | "ok" | "watch" | "retraining_candidate"
+  sample_size: number
+  reference_size: number
+  risk_score_shift: {
+    recent_average: number | null
+    reference_average: number | null
+    absolute_difference: number | null
+  }
+  district_shift: {
+    largest_shift_district: string | null
+    absolute_difference: number | null
+  }
+  feature_warnings: Array<{
+    feature: string
+    recent_mean: number
+    reference_mean: number
+    relative_change: number
+    status: "watch" | "retraining_candidate"
+  }>
+  recommendation: string
+}
+
 export type PredictionResult = {
   record_id: string | null
   flood_risk_score: number
@@ -178,6 +235,32 @@ export function getModelInfo() {
 
 export function getMonitoringSummary() {
   return request<MonitoringSummary>("/monitoring/summary")
+}
+
+export function getDriftSummary() {
+  return request<DriftSummary>("/monitoring/drift")
+}
+
+export function getFeedbackSummary() {
+  return request<FeedbackSummary>("/feedback/summary")
+}
+
+export function submitFeedback(payload: {
+  record_id: string
+  model_version: string
+  rating: FeedbackRating
+  observed_outcome?: ObservedOutcome
+  notes?: string
+  source?: "dashboard" | "api"
+}) {
+  return request<FeedbackEvent>("/feedback", {
+    method: "POST",
+    body: JSON.stringify({
+      ...payload,
+      observed_outcome: payload.observed_outcome ?? "unknown",
+      source: payload.source ?? "dashboard",
+    }),
+  })
 }
 
 export function predictFloodRisk(record: Record<string, unknown>) {

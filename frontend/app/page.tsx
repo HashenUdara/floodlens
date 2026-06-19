@@ -5,11 +5,16 @@ import { AlertTriangle, RadioTower, Waves } from "lucide-react"
 
 import {
   batchPredict,
+  DriftSummary,
   DistrictSummary,
   EmergencyPriorityLocation,
+  FeedbackRating,
+  FeedbackSummary,
   getDistricts,
   getDistrictSummary,
+  getDriftSummary,
   getEmergencyPriority,
+  getFeedbackSummary,
   getHealth,
   getHighRiskLocations,
   getLocationRecord,
@@ -22,8 +27,10 @@ import {
   LocationRow,
   ModelInfo,
   MonitoringSummary,
+  ObservedOutcome,
   predictFloodRisk,
   PredictionResult,
+  submitFeedback,
 } from "@/lib/api"
 import { sampleRecord } from "@/lib/sample-record"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -57,6 +64,9 @@ export default function Home() {
   const [apiState, setApiState] = useState<ApiState>("checking")
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
   const [monitoring, setMonitoring] = useState<MonitoringSummary | null>(null)
+  const [feedbackSummary, setFeedbackSummary] =
+    useState<FeedbackSummary | null>(null)
+  const [driftSummary, setDriftSummary] = useState<DriftSummary | null>(null)
   const [districts, setDistricts] = useState<string[]>([])
   const [locations, setLocations] = useState<LocationRow[]>([])
   const [districtSummary, setDistrictSummary] = useState<DistrictSummary[]>([])
@@ -84,10 +94,19 @@ export default function Home() {
   )
   const [batchScoring, setBatchScoring] = useState(false)
   const [batchStatus, setBatchStatus] = useState<string | null>(null)
+  const [feedbackSubmittingRecordId, setFeedbackSubmittingRecordId] =
+    useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  async function refreshMonitoring() {
-    setMonitoring(await getMonitoringSummary())
+  async function refreshOperations() {
+    const [summary, feedback, drift] = await Promise.all([
+      getMonitoringSummary(),
+      getFeedbackSummary(),
+      getDriftSummary(),
+    ])
+    setMonitoring(summary)
+    setFeedbackSummary(feedback)
+    setDriftSummary(drift)
   }
 
   async function refreshModelScores(scopedDistrict?: string) {
@@ -102,16 +121,21 @@ export default function Home() {
 
     async function loadDashboard() {
       try {
-        const [health, model, summary, districtList] = await Promise.all([
-          getHealth(),
-          getModelInfo(),
-          getMonitoringSummary(),
-          getDistricts(),
-        ])
+        const [health, model, summary, feedback, drift, districtList] =
+          await Promise.all([
+            getHealth(),
+            getModelInfo(),
+            getMonitoringSummary(),
+            getFeedbackSummary(),
+            getDriftSummary(),
+            getDistricts(),
+          ])
         if (ignore) return
         setApiState(health.model_loaded ? "online" : "offline")
         setModelInfo(model)
         setMonitoring(summary)
+        setFeedbackSummary(feedback)
+        setDriftSummary(drift)
         setDistricts(districtList)
       } catch (err: unknown) {
         if (ignore) return
@@ -236,7 +260,7 @@ export default function Home() {
           [result.record_id as string]: result,
         }))
       }
-      await refreshMonitoring()
+      await refreshOperations()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Prediction request failed")
     } finally {
@@ -254,7 +278,7 @@ export default function Home() {
       setPrediction(result)
       setLocationPredictions((current) => ({ ...current, [recordId]: result }))
       setSelectedRecordId(recordId)
-      await refreshMonitoring()
+      await refreshOperations()
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Prediction request failed")
     } finally {
@@ -278,7 +302,7 @@ export default function Home() {
         record_ids: recordIds,
       })
       setBatchStatus(`${result.scored.toLocaleString()} visible scored`)
-      await Promise.all([refreshMonitoring(), refreshModelScores(scopedDistrict)])
+      await Promise.all([refreshOperations(), refreshModelScores(scopedDistrict)])
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : "Batch scoring failed")
     } finally {
@@ -291,6 +315,31 @@ export default function Home() {
     setSearch(recordId)
     setSelectedRecordId(recordId)
     setActiveView("explorer")
+  }
+
+  async function handleSubmitFeedback(payload: {
+    recordId: string
+    modelVersion: string
+    rating: FeedbackRating
+    observedOutcome: ObservedOutcome
+  }) {
+    setFeedbackSubmittingRecordId(payload.recordId)
+    setError(null)
+
+    try {
+      await submitFeedback({
+        record_id: payload.recordId,
+        model_version: payload.modelVersion,
+        rating: payload.rating,
+        observed_outcome: payload.observedOutcome,
+      })
+      await refreshOperations()
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : "Feedback request failed")
+      throw err
+    } finally {
+      setFeedbackSubmittingRecordId(null)
+    }
   }
 
   return (
@@ -402,10 +451,12 @@ export default function Home() {
                   predictions={servedScores}
                   loading={loadingLocations}
                   predictingRecordId={predictingRecordId}
+                  feedbackSubmittingRecordId={feedbackSubmittingRecordId}
                   onDistrictChange={setDistrict}
                   onSearchChange={setSearch}
                   onSelectLocation={setSelectedRecordId}
                   onPredictLocation={handlePredictLocation}
+                  onSubmitFeedback={handleSubmitFeedback}
                 />
               </TabsContent>
 
@@ -448,11 +499,17 @@ export default function Home() {
                   onPayloadChange={setPayload}
                   onResetPayload={() => setPayload(initialPayload)}
                   onPredict={handleJsonPredict}
+                  feedbackSubmittingRecordId={feedbackSubmittingRecordId}
+                  onSubmitFeedback={handleSubmitFeedback}
                 />
               </TabsContent>
 
               <TabsContent value="monitoring">
-                <MonitoringPanel monitoring={monitoring} />
+                <MonitoringPanel
+                  monitoring={monitoring}
+                  feedbackSummary={feedbackSummary}
+                  driftSummary={driftSummary}
+                />
               </TabsContent>
             </Tabs>
           </div>

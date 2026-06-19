@@ -45,6 +45,12 @@ class ModelScoreStore:
             reverse=True,
         )[:bounded_limit]
 
+    def get_score(self, record_id: str) -> dict[str, Any] | None:
+        for score in self._read_all():
+            if str(score.get("record_id")) == record_id:
+                return score
+        return None
+
     def _read_all(self) -> list[dict[str, Any]]:
         if not self.score_path.exists():
             return []
