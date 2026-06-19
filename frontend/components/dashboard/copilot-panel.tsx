@@ -40,6 +40,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool"
 import { Button } from "@/components/ui/button"
+import { Spinner } from "@/components/ui/spinner"
 import {
   Card,
   CardAction,
@@ -74,6 +75,9 @@ export function CopilotPanel({
     useChat<FloodLensCopilotMessage>({
       transport,
     })
+  const isThinking =
+    status === "submitted" ||
+    (status === "streaming" && messages.at(-1)?.role === "user")
 
   function submitText(text: string) {
     const clean = text.trim()
@@ -120,6 +124,20 @@ export function CopilotPanel({
                     <CopilotMessage key={message.id} message={message} />
                   ))
                 )}
+                {isThinking ? (
+                  <Message from="assistant">
+                    <MessageContent>
+                      <div
+                        className="flex items-center gap-2 text-sm text-muted-foreground"
+                        role="status"
+                        aria-live="polite"
+                      >
+                        <Spinner />
+                        <span>Thinking...</span>
+                      </div>
+                    </MessageContent>
+                  </Message>
+                ) : null}
               </ConversationContent>
               <ConversationScrollButton />
             </Conversation>
