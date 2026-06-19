@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 from app.core.settings import settings
 from app.main import app
 from app.services.location_service import MonitoredLocationProvider, get_location_service
+from app.services.model_score_store import ModelScoreStore, get_model_score_store
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
 
 
@@ -16,6 +17,16 @@ def temp_log_service(tmp_path):
     service = PredictionLogService(tmp_path / "predictions.jsonl")
     app.dependency_overrides[get_prediction_log_service] = lambda: service
     yield service
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def temp_runtime_services(tmp_path):
+    log_service = PredictionLogService(tmp_path / "predictions.jsonl")
+    score_store = ModelScoreStore(tmp_path / "latest_scores.json")
+    app.dependency_overrides[get_prediction_log_service] = lambda: log_service
+    app.dependency_overrides[get_model_score_store] = lambda: score_store
+    yield log_service, score_store
     app.dependency_overrides.clear()
 
 
@@ -79,6 +90,10 @@ def test_monitoring_summary_returns_empty_defaults(temp_log_service):
     assert response.status_code == 200
     assert response.json() == {
         "total_predictions": 0,
+        "single_prediction_count": 0,
+        "batch_prediction_count": 0,
+        "batch_run_count": 0,
+        "latest_batch_id": None,
         "low_risk_count": 0,
         "medium_risk_count": 0,
         "high_risk_count": 0,
@@ -101,6 +116,10 @@ def test_monitoring_summary_counts_logged_predictions(temp_log_service):
     assert response.status_code == 200
     body = response.json()
     assert body["total_predictions"] == 2
+    assert body["single_prediction_count"] == 2
+    assert body["batch_prediction_count"] == 0
+    assert body["batch_run_count"] == 0
+    assert body["latest_batch_id"] is None
     assert body["medium_risk_count"] == 2
     assert body["low_risk_count"] == 0
     assert body["high_risk_count"] == 0
@@ -264,3 +283,73 @@ def test_emergency_priority_bounds_limit_and_handles_unknown_district():
     response = client.get("/emergency-priority", params={"district": "Unknown"})
     assert response.status_code == 200
     assert response.json() == []
+
+
+def test_batch_predict_scores_district_and_persists_latest_scores(temp_runtime_services):
+    log_service, score_store = temp_runtime_services
+
+    response = client.post("/batch-predict", json={"district": "Kilinochchi", "limit": 2})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["source"] == "batch"
+    assert body["model_version"] == "flood-risk-v3"
+    assert body["district"] == "Kilinochchi"
+    assert body["requested"] == 2
+    assert body["scored"] == 2
+    assert len(body["predictions"]) == 2
+    assert all(item["district"] == "Kilinochchi" for item in body["predictions"])
+    assert all(0 <= item["flood_risk_score"] <= 1 for item in body["predictions"])
+    assert all(item["risk_level"] in {"Low", "Medium", "High"} for item in body["predictions"])
+
+    events = log_service.read_events()
+    assert len(events) == 2
+    assert {event["source"] for event in events} == {"batch"}
+    assert {event["batch_id"] for event in events} == {body["batch_id"]}
+
+    scores = score_store.list_scores(district="Kilinochchi")
+    assert len(scores) == 2
+    assert {score["batch_id"] for score in scores} == {body["batch_id"]}
+    assert {score["source"] for score in scores} == {"batch"}
+
+    response = client.get("/model-scores", params={"district": "Kilinochchi"})
+    assert response.status_code == 200
+    assert len(response.json()) == 2
+
+
+def test_batch_predict_caps_limit_and_handles_unknown_district(temp_runtime_services):
+    response = client.post("/batch-predict", json={"limit": 150})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["requested"] == 100
+    assert body["scored"] == 100
+    assert len(body["predictions"]) == 100
+
+    response = client.post("/batch-predict", json={"district": "Unknown", "limit": 5})
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["requested"] == 5
+    assert body["scored"] == 0
+    assert body["predictions"] == []
+
+
+def test_monitoring_summary_tracks_single_and_batch_sources(temp_runtime_services):
+    rows = pd.read_csv(settings.test_data_path, nrows=1)
+    response = client.post("/predict", json={"record": rows.iloc[0].to_dict()})
+    assert response.status_code == 200
+
+    response = client.post("/batch-predict", json={"district": "Kilinochchi", "limit": 2})
+    assert response.status_code == 200
+    batch_id = response.json()["batch_id"]
+
+    response = client.get("/monitoring/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_predictions"] == 3
+    assert body["single_prediction_count"] == 1
+    assert body["batch_prediction_count"] == 2
+    assert body["batch_run_count"] == 1
+    assert body["latest_batch_id"] == batch_id

@@ -3,14 +3,16 @@
 from typing import Any
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
+from app.services.batch_scoring_service import BatchScoringService
 from app.core.settings import settings
 from app.services.decision_intelligence_service import (
     DecisionIntelligenceService,
     get_decision_intelligence_service,
 )
 from app.services.location_service import LocationService, get_location_service
+from app.services.model_score_store import ModelScoreStore, get_model_score_store
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
 from app.services.predictor_service import PredictorService, get_predictor_service
 
@@ -21,6 +23,14 @@ class PredictRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     record: dict[str, Any]
+
+
+class BatchPredictRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    district: str | None = None
+    limit: int = Field(default=100, ge=1)
+    record_ids: list[str] | None = None
 
 
 @router.get("/health")
@@ -46,11 +56,41 @@ def predict(
     return service.predict(payload.record, log_service=log_service)
 
 
+@router.post("/batch-predict")
+def batch_predict(
+    payload: BatchPredictRequest,
+    provider: LocationService = Depends(get_location_service),
+    predictor: PredictorService = Depends(get_predictor_service),
+    log_service: PredictionLogService = Depends(get_prediction_log_service),
+    score_store: ModelScoreStore = Depends(get_model_score_store),
+) -> dict[str, Any]:
+    service = BatchScoringService(
+        provider=provider,
+        predictor=predictor,
+        log_service=log_service,
+        score_store=score_store,
+    )
+    return service.score_locations(
+        district=payload.district,
+        limit=payload.limit,
+        record_ids=payload.record_ids,
+    )
+
+
 @router.get("/monitoring/summary")
 def monitoring_summary(
     log_service: PredictionLogService = Depends(get_prediction_log_service),
 ) -> dict[str, Any]:
     return log_service.summary()
+
+
+@router.get("/model-scores")
+def model_scores(
+    district: str | None = None,
+    limit: int = 100,
+    score_store: ModelScoreStore = Depends(get_model_score_store),
+) -> list[dict[str, Any]]:
+    return score_store.list_scores(district=district, limit=limit)
 
 
 @router.get("/districts")

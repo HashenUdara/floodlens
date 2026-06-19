@@ -57,6 +57,19 @@ class PredictorService:
         (log_service or self.log_service).log_prediction(record, prediction)
         return prediction
 
+    def predict_batch(self, records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        for record in records:
+            self._validate_record(record)
+
+        if not records:
+            return []
+
+        frame = pd.DataFrame(records)
+        predictions = self.predictor.predict_frame(frame).to_dict(orient="records")
+        for prediction in predictions:
+            prediction["flood_risk_score"] = float(prediction["flood_risk_score"])
+        return predictions
+
     def _load_metadata(self) -> dict[str, Any]:
         if not self.metadata_path.exists():
             raise RuntimeError(f"Model metadata not found: {self.metadata_path}")

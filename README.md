@@ -447,6 +447,12 @@ Best judging line:
 
 ## Local Development
 
+For a full teammate setup from a fresh clone, including GitHub Release
+artifacts, Python environments, frontend variables, verification commands, and
+troubleshooting, use:
+
+- [Zero-to-hero setup guide](docs/setup_guide.md)
+
 Place `train.csv` and `test.csv` under `data/raw/`.
 
 Run ML tests:

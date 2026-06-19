@@ -16,6 +16,10 @@ export type ModelInfo = {
 
 export type MonitoringSummary = {
   total_predictions: number
+  single_prediction_count: number
+  batch_prediction_count: number
+  batch_run_count: number
+  latest_batch_id: string | null
   low_risk_count: number
   medium_risk_count: number
   high_risk_count: number
@@ -33,6 +37,27 @@ export type PredictionResult = {
   flood_risk_score: number
   risk_level: "Low" | "Medium" | "High"
   model_version: string
+}
+
+export type LatestModelScore = PredictionResult & {
+  record_id: string
+  district: string
+  place_name: string
+  baseline_risk_score: number
+  baseline_risk_level: "Low" | "Medium" | "High"
+  operational_priority: "Routine" | "Watch" | "Elevated" | "Critical"
+  scored_at: string
+  source: "batch" | "api"
+  batch_id?: string
+}
+
+export type BatchPrediction = PredictionResult & {
+  record_id: string
+  district: string
+  place_name: string
+  baseline_risk_score: number
+  baseline_risk_level: "Low" | "Medium" | "High"
+  operational_priority: "Routine" | "Watch" | "Elevated" | "Critical"
 }
 
 export type LocationRow = {
@@ -105,6 +130,16 @@ export type EmergencyPriorityLocation = {
   recommended_action: string
 }
 
+export type BatchPredictResponse = {
+  batch_id: string
+  source: "batch"
+  model_version: string
+  district: string | null
+  requested: number
+  scored: number
+  predictions: BatchPrediction[]
+}
+
 export type ApiHealth = {
   status: string
   service: string
@@ -150,6 +185,32 @@ export function predictFloodRisk(record: Record<string, unknown>) {
     method: "POST",
     body: JSON.stringify({ record }),
   })
+}
+
+export function batchPredict(params?: {
+  district?: string
+  limit?: number
+  record_ids?: string[]
+}) {
+  return request<BatchPredictResponse>("/batch-predict", {
+    method: "POST",
+    body: JSON.stringify({
+      district: params?.district,
+      limit: params?.limit ?? 100,
+      record_ids: params?.record_ids,
+    }),
+  })
+}
+
+export function getModelScores(params?: {
+  district?: string
+  limit?: number
+}) {
+  const query = new URLSearchParams()
+  if (params?.district) query.set("district", params.district)
+  if (params?.limit) query.set("limit", String(params.limit))
+  const suffix = query.toString() ? `?${query.toString()}` : ""
+  return request<LatestModelScore[]>(`/model-scores${suffix}`)
 }
 
 export function getDistricts() {

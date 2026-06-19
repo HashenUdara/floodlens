@@ -12,6 +12,10 @@ from app.core.settings import settings
 
 EMPTY_SUMMARY = {
     "total_predictions": 0,
+    "single_prediction_count": 0,
+    "batch_prediction_count": 0,
+    "batch_run_count": 0,
+    "latest_batch_id": None,
     "low_risk_count": 0,
     "medium_risk_count": 0,
     "high_risk_count": 0,
@@ -26,10 +30,16 @@ class PredictionLogService:
     def __init__(self, log_path: Path):
         self.log_path = log_path
 
-    def log_prediction(self, record: dict[str, Any], prediction: dict[str, Any]) -> dict[str, Any]:
+    def log_prediction(
+        self,
+        record: dict[str, Any],
+        prediction: dict[str, Any],
+        source: str = "api",
+        batch_id: str | None = None,
+    ) -> dict[str, Any]:
         event = {
             "timestamp": datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z"),
-            "source": "api",
+            "source": source,
             "record_id": prediction.get("record_id"),
             "district": record.get("district"),
             "place_name": record.get("place_name"),
@@ -37,6 +47,8 @@ class PredictionLogService:
             "risk_level": prediction.get("risk_level"),
             "model_version": prediction.get("model_version"),
         }
+        if batch_id:
+            event["batch_id"] = batch_id
         self.log_path.parent.mkdir(parents=True, exist_ok=True)
         with self.log_path.open("a", encoding="utf-8") as f:
             f.write(json.dumps(event, ensure_ascii=True) + "\n")
@@ -63,11 +75,26 @@ class PredictionLogService:
         risk_counts = Counter(event.get("risk_level") for event in events)
         model_versions = Counter(event.get("model_version") for event in events if event.get("model_version"))
         districts = Counter(event.get("district") for event in events if event.get("district"))
+        sources = Counter(event.get("source") or "api" for event in events)
+        batch_ids = {
+            event.get("batch_id")
+            for event in events
+            if event.get("source") == "batch" and event.get("batch_id")
+        }
         scores = [float(event["flood_risk_score"]) for event in events if event.get("flood_risk_score") is not None]
         latest_prediction_at = max(event["timestamp"] for event in events if event.get("timestamp"))
+        latest_batch_event = max(
+            (event for event in events if event.get("source") == "batch" and event.get("batch_id")),
+            key=lambda event: event.get("timestamp") or "",
+            default=None,
+        )
 
         return {
             "total_predictions": len(events),
+            "single_prediction_count": sources.get("api", 0),
+            "batch_prediction_count": sources.get("batch", 0),
+            "batch_run_count": len(batch_ids),
+            "latest_batch_id": latest_batch_event.get("batch_id") if latest_batch_event else None,
             "low_risk_count": risk_counts.get("Low", 0),
             "medium_risk_count": risk_counts.get("Medium", 0),
             "high_risk_count": risk_counts.get("High", 0),
