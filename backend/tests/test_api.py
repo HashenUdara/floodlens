@@ -4,6 +4,8 @@ from fastapi.testclient import TestClient
 
 from app.core.settings import settings
 from app.main import app
+from app.services.drift_monitoring_service import DriftMonitoringService, get_drift_monitoring_service
+from app.services.feedback_service import FeedbackService, get_feedback_service
 from app.services.location_service import MonitoredLocationProvider, get_location_service
 from app.services.model_score_store import ModelScoreStore, get_model_score_store
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
@@ -27,6 +29,31 @@ def temp_runtime_services(tmp_path):
     app.dependency_overrides[get_prediction_log_service] = lambda: log_service
     app.dependency_overrides[get_model_score_store] = lambda: score_store
     yield log_service, score_store
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def temp_phase3_services(tmp_path):
+    provider = get_location_service()
+    log_service = PredictionLogService(tmp_path / "predictions.jsonl")
+    score_store = ModelScoreStore(tmp_path / "latest_scores.json")
+    feedback_service = FeedbackService(
+        tmp_path / "feedback.jsonl",
+        provider=provider,
+        score_store=score_store,
+    )
+    drift_service = DriftMonitoringService(
+        provider=provider,
+        log_service=log_service,
+        score_store=score_store,
+        feedback_service=feedback_service,
+    )
+
+    app.dependency_overrides[get_prediction_log_service] = lambda: log_service
+    app.dependency_overrides[get_model_score_store] = lambda: score_store
+    app.dependency_overrides[get_feedback_service] = lambda: feedback_service
+    app.dependency_overrides[get_drift_monitoring_service] = lambda: drift_service
+    yield log_service, score_store, feedback_service, drift_service
     app.dependency_overrides.clear()
 
 
@@ -370,3 +397,182 @@ def test_monitoring_summary_tracks_single_and_batch_sources(temp_runtime_service
     assert body["batch_prediction_count"] == 2
     assert body["batch_run_count"] == 1
     assert body["latest_batch_id"] == batch_id
+
+
+def test_feedback_summary_returns_empty_defaults(temp_phase3_services):
+    response = client.get("/feedback/summary")
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "total_feedback": 0,
+        "useful_count": 0,
+        "not_useful_count": 0,
+        "observed_flood_count": 0,
+        "observed_no_flood_count": 0,
+        "disagreement_count": 0,
+        "disagreement_rate": 0,
+        "latest_feedback_at": None,
+        "retraining_candidate": False,
+        "top_feedback_districts": [],
+    }
+
+
+def test_feedback_writes_event_and_counts_summary(temp_phase3_services):
+    _, score_store, feedback_service, _ = temp_phase3_services
+    record_id = "F104559"
+    score_store.upsert_many(
+        [
+            {
+                "record_id": record_id,
+                "district": "Kilinochchi",
+                "place_name": "Kudakumbura South",
+                "flood_risk_score": 0.82,
+                "risk_level": "High",
+                "model_version": "flood-risk-v3",
+                "scored_at": "2026-06-19T10:00:00Z",
+                "source": "batch",
+            }
+        ]
+    )
+
+    response = client.post(
+        "/feedback",
+        json={
+            "record_id": record_id,
+            "model_version": "flood-risk-v3",
+            "rating": "useful",
+            "observed_outcome": "not_flooded",
+            "notes": "field team reported normal conditions",
+            "source": "dashboard",
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["record_id"] == record_id
+    assert body["district"] == "Kilinochchi"
+    assert body["flood_risk_score"] == 0.82
+    assert body["risk_level"] == "High"
+    assert body["disagreement"] is True
+
+    events = feedback_service.read_events()
+    assert len(events) == 1
+    assert events[0]["notes"] == "field team reported normal conditions"
+
+    response = client.get("/feedback/summary")
+    assert response.status_code == 200
+    summary = response.json()
+    assert summary["total_feedback"] == 1
+    assert summary["useful_count"] == 1
+    assert summary["observed_no_flood_count"] == 1
+    assert summary["disagreement_count"] == 1
+    assert summary["disagreement_rate"] == 1
+    assert summary["retraining_candidate"] is False
+    assert summary["top_feedback_districts"] == [{"district": "Kilinochchi", "count": 1}]
+
+
+def test_feedback_rejects_invalid_rating_without_logging(temp_phase3_services):
+    _, _, feedback_service, _ = temp_phase3_services
+
+    response = client.post(
+        "/feedback",
+        json={
+            "record_id": "F104559",
+            "model_version": "flood-risk-v3",
+            "rating": "maybe",
+            "observed_outcome": "unknown",
+        },
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["message"] == "Invalid rating."
+    assert feedback_service.read_events() == []
+
+
+def test_feedback_unknown_record_does_not_write_event(temp_phase3_services):
+    _, _, feedback_service, _ = temp_phase3_services
+
+    response = client.post(
+        "/feedback",
+        json={
+            "record_id": "not-a-record",
+            "model_version": "flood-risk-v3",
+            "rating": "useful",
+            "observed_outcome": "unknown",
+        },
+    )
+
+    assert response.status_code == 404
+    assert feedback_service.read_events() == []
+
+
+def test_feedback_summary_marks_retraining_candidate(temp_phase3_services):
+    _, score_store, _, _ = temp_phase3_services
+    rows = pd.read_csv(settings.test_data_path, nrows=5)
+    score_store.upsert_many(
+        [
+            {
+                "record_id": row["record_id"],
+                "district": row["district"],
+                "place_name": row["place_name"],
+                "flood_risk_score": 0.9,
+                "risk_level": "High",
+                "model_version": "flood-risk-v3",
+                "scored_at": "2026-06-19T10:00:00Z",
+                "source": "batch",
+            }
+            for _, row in rows.iterrows()
+        ]
+    )
+
+    for _, row in rows.iterrows():
+        response = client.post(
+            "/feedback",
+            json={
+                "record_id": row["record_id"],
+                "model_version": "flood-risk-v3",
+                "rating": "not_useful",
+                "observed_outcome": "not_flooded",
+            },
+        )
+        assert response.status_code == 200
+
+    response = client.get("/feedback/summary")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["total_feedback"] == 5
+    assert body["disagreement_count"] == 5
+    assert body["retraining_candidate"] is True
+
+
+def test_monitoring_drift_returns_insufficient_data_without_predictions(temp_phase3_services):
+    response = client.get("/monitoring/drift")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] == "insufficient_data"
+    assert body["sample_size"] == 0
+    assert body["reference_size"] > 0
+    assert body["feature_warnings"] == []
+
+
+def test_monitoring_drift_returns_shift_summary_after_batch_scoring(temp_phase3_services):
+    response = client.post("/batch-predict", json={"district": "Kilinochchi", "limit": 10})
+    assert response.status_code == 200
+
+    response = client.get("/monitoring/drift")
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["status"] in {"ok", "watch", "retraining_candidate"}
+    assert body["sample_size"] == 10
+    assert body["reference_size"] > body["sample_size"]
+    assert {"recent_average", "reference_average", "absolute_difference"}.issubset(
+        body["risk_score_shift"]
+    )
+    assert {"largest_shift_district", "absolute_difference"}.issubset(
+        body["district_shift"]
+    )
+    assert isinstance(body["feature_warnings"], list)
+    assert body["recommendation"]

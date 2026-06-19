@@ -14,12 +14,20 @@ system.
 ## Product Positioning
 
 FloodLens helps authorities, planners, insurers, logistics teams, and response
-coordinators answer four practical questions:
+coordinators answer five practical questions:
 
 - Which places are at higher flood risk?
 - Why are those places risky?
 - Which districts or assets should be prioritized first?
 - What action should be considered next?
+- What evidence from model outputs, monitoring signals, feedback, and uploaded
+  documents supports that decision?
+
+The next product layer is **FloodLens Intelligent Copilot**: a GPT-powered,
+tool-grounded assistant that turns model scores, monitoring state, field
+feedback, drift signals, and response documents into defensible operational
+briefs. It is positioned as an intelligent Copilot, but not as a generic GPT
+wrapper.
 
 FloodLens is a decision-support system, not an official emergency alert system.
 It should not claim live disaster authority unless connected to verified
@@ -40,6 +48,7 @@ The repository already contains a working MLOps foundation:
   risk, risk drivers, priority, and recommended action
 - provider-backed district and priority intelligence
 - batch model scoring with latest model score storage
+- feedback capture and drift/retraining monitoring
 - split dashboard component structure under `frontend/components/dashboard/`
 
 Implemented backend APIs:
@@ -49,6 +58,9 @@ Implemented backend APIs:
 - `POST /predict`
 - `POST /batch-predict`
 - `GET /monitoring/summary`
+- `GET /monitoring/drift`
+- `POST /feedback`
+- `GET /feedback/summary`
 - `GET /model-scores`
 - `GET /districts`
 - `GET /locations`
@@ -84,6 +96,10 @@ The current backend has useful service boundaries:
   the saved ML bundle.
 - `ModelScoreStore`: persists the latest model-assisted score per monitored
   place in a lightweight JSON store.
+- `FeedbackService`: records human usefulness feedback, observed outcomes, and
+  model/field disagreement.
+- `DriftMonitoringService`: compares recently scored records against the seed
+  reference distribution and produces retraining signals.
 
 The frontend has been split into focused dashboard components:
 
@@ -98,10 +114,13 @@ The frontend has been split into focused dashboard components:
 - monitoring view
 - District Command and Priority Queue views
 - baseline versus model score comparison
+- feedback controls for scored places
+- feedback and drift cards in the monitoring view
 - component modules under `frontend/components/dashboard/`
 
-The most important remaining gap is now the learning loop: feedback capture,
-drift monitoring, and retraining signals.
+The most important remaining product gap is now the intelligent Copilot layer:
+natural-language decision support grounded in FloodLens tools and, later,
+uploaded response documents.
 
 ## Winning Readiness Against Judging Criteria
 
@@ -114,24 +133,21 @@ aggregation, prioritization, feedback, drift monitoring, and a grounded Copilot.
 | --- | --- | --- | --- |
 | Scenario Understanding & Solution Design (20%) | Strong | Clear flood-risk decision-support product, monitored-place layer, recommended actions, district command views, limitations stated | Final demo story tied tightly to response planning |
 | Technical Implementation (30%) | Strong | Feature engineering pipeline, ensemble model artifact, FastAPI serving, provider layer, decision APIs, batch scoring, frontend dashboard, tests | Richer evaluation/priority outputs and final polish |
-| MLOps & Production Readiness (25%) | Partial | model bundle, metadata, API serving, prediction logs, monitoring summary, tests | feedback loop, drift summary, CI/CD, Docker verification, retraining trigger story |
-| Innovation & Problem Solving (10%) | Good | business risk drivers, corrected presentation coordinates, operational priority, district command and emergency priority workflow | grounded Copilot and district reports |
+| MLOps & Production Readiness (25%) | Strong | model bundle, metadata, API serving, prediction logs, batch scoring, feedback loop, drift summary, tests | CI/CD, Docker verification, retraining automation story |
+| Innovation & Problem Solving (10%) | Strong path | business risk drivers, corrected presentation coordinates, operational priority, district command, emergency priority workflow, feedback and drift signals | GPT-powered grounded Copilot and document RAG |
 | Viva Evaluation (15%) | Good but needs polish | architecture rationale and README positioning | final architecture diagram, demo script, trade-off notes, known limitation answers |
 
 The highest-impact missing pieces are:
 
-1. **Feedback + Drift Monitoring**
-   - `POST /feedback`
-   - `GET /monitoring/drift`
-   - capture observed outcomes, user confidence, drift status, and retraining
-     candidate state.
-
-2. **Grounded Flood Copilot**
+1. **FloodLens Intelligent Copilot**
    - `POST /copilot`
-   - calls internal data tools instead of guessing
-   - answers district, location, priority, report, and monitoring questions.
+   - GPT-powered answers grounded in internal FloodLens tools
+   - summarizes district risk, location drivers, priority queues, model
+     monitoring, feedback, and drift state
+   - becomes RAG-ready for uploaded SOPs, field reports, policies, and response
+     documents.
 
-3. **Deployment and CI Evidence**
+2. **Deployment and CI Evidence**
    - GitHub Actions
    - Docker Compose verification
    - architecture diagram and final demo flow
@@ -353,16 +369,21 @@ Acceptance criteria status:
   rows.
 - monitoring summary includes single vs batch prediction counts.
 
-### Phase 3: Feedback and Monitoring Upgrade
+### Phase 3: Feedback and Monitoring Upgrade — Complete
 
-Add learning-loop evidence:
+Implemented:
 
 - `POST /feedback`
-- capture useful/not useful prediction feedback
-- capture observed flood outcome when available
-- add monitoring cards for feedback volume, disagreement rate, and retraining
-  candidate status
-- add simple input drift checks against training/reference data
+- `GET /feedback/summary`
+- `GET /monitoring/drift`
+- file-based feedback events in `backend/logs/feedback.jsonl`
+- useful/not useful prediction feedback
+- observed outcome capture: flooded, no flood, or unknown
+- disagreement detection when observed outcomes contradict high/low model risk
+- retraining candidate status from feedback disagreement or drift thresholds
+- dashboard feedback controls in Risk Explorer and Prediction views
+- monitoring cards for feedback volume, disagreement rate, drift status, and
+  feature warnings
 
 Why this matters:
 
@@ -370,7 +391,7 @@ Why this matters:
 - shows the model lifecycle, not just model serving
 - creates a clear retraining story
 
-Acceptance criteria:
+Acceptance criteria status:
 
 - `POST /feedback` records record ID, model version, user feedback, optional
   observed outcome, and timestamp.
@@ -379,10 +400,22 @@ Acceptance criteria:
 - drift summary compares recent prediction input ranges/distributions against
   reference training/test data.
 - failures return clear API errors and do not corrupt logs.
+- backend tests cover feedback writes, validation failures, summary counts,
+  retraining candidate status, and drift summaries.
 
-### Phase 4: Grounded Flood Copilot
+### Phase 4: FloodLens Intelligent Copilot
 
-Add Copilot only after the decision APIs exist.
+Add the final intelligence layer after the decision APIs, batch scoring,
+feedback loop, and drift monitoring exist.
+
+Positioning:
+
+> FloodLens Intelligent Copilot is a GPT-powered assistant that turns model
+> predictions, monitoring logs, field feedback, drift signals, and uploaded
+> flood-response documents into grounded operational recommendations.
+
+This is not positioned as a generic chatbot. It is a Copilot for flood-risk
+operations that must use FloodLens evidence before answering.
 
 Supported questions:
 
@@ -392,13 +425,29 @@ Supported questions:
 - Compare Colombo and Kalutara.
 - Generate a district flood-risk report.
 - Summarize model monitoring status.
+- Is retraining needed based on feedback and drift?
+- What evidence supports this recommendation?
 
 Rules:
 
-- Copilot must call backend tools/APIs.
+- Copilot must call backend tools/APIs before answering operational questions.
 - Copilot must not invent live rainfall, official warnings, or evacuation orders.
 - Copilot should say when data is seed/demo data.
 - Copilot should produce decision-support language, not emergency authority.
+- Copilot answers should include source facts from the backend.
+
+Technical direction:
+
+- Use OpenAI GPT for reasoning and final response generation.
+- Use Vercel AI SDK for the streaming chat UI and structured tool calls.
+- Keep FastAPI as the ML and decision backend.
+- Start with tool-grounded answers from existing APIs.
+- Add document RAG after the tool-grounded Copilot works:
+  - uploaded PDFs/SOPs/field reports
+  - chunking and embeddings
+  - Postgres with pgvector
+  - cited answers that combine retrieved documents with FloodLens model and
+    monitoring data.
 
 Acceptance criteria:
 
@@ -408,10 +457,13 @@ Acceptance criteria:
   - list priority locations
   - generate district report
   - summarize monitoring status
+  - summarize feedback and drift/retraining status
 - Copilot responses include source data from the backend.
 - unsupported questions receive safe limitation language.
 - Copilot does not call the model directly when existing decision APIs already
   provide the required facts.
+- RAG is framed as a document intelligence extension, not as the source of model
+  predictions.
 
 ### Phase 5: Deployment and CI/CD Polish
 
@@ -451,20 +503,26 @@ Acceptance criteria:
 4. Select a monitored place.
 5. Show baseline risk, drivers, operational priority, and recommended action.
 6. Run model prediction for that place.
-7. Show the monitoring count update.
-8. Open District Command and show district-level risk comparison.
-9. Open Priority Queue and show the response-planning ranking.
-10. Ask Flood Copilot:
+7. Submit useful/not useful feedback and, when available, an observed outcome.
+8. Show monitoring count, feedback count, disagreement rate, and drift status.
+9. Open District Command and show district-level risk comparison.
+10. Run batch scoring for a district and show model score versus baseline risk.
+11. Open Priority Queue and show the response-planning ranking.
+12. Ask FloodLens Intelligent Copilot:
     - "Why is this location risky?"
     - "Which places should be prioritized first?"
-11. End on MLOps monitoring: logs, model version, feedback, drift/retraining
+    - "Is retraining needed based on feedback and drift?"
+    - "Generate a district action brief using the current model and monitoring
+      evidence."
+13. End on MLOps monitoring: logs, model version, feedback, drift/retraining
     path.
 
 Best judging line:
 
-> We are not only predicting flood risk. We are operationalizing flood-risk ML
-> into a decision-support platform that ranks risk, explains drivers, monitors
-> predictions, and supports response planning.
+> FloodLens is not just a flood-risk model or a dashboard. It is an intelligent
+> flood-risk operating system where predictive ML, MLOps monitoring, feedback,
+> drift checks, and a GPT-powered grounded Copilot work together to support
+> defensible response planning.
 
 ## Local Development
 

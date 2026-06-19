@@ -8,10 +8,19 @@ import {
   Gauge,
   Loader2,
   Play,
+  RefreshCcw,
   ShieldCheck,
 } from "lucide-react"
 
-import { ModelInfo, MonitoringSummary, PredictionResult } from "@/lib/api"
+import {
+  DriftSummary,
+  FeedbackRating,
+  FeedbackSummary,
+  ModelInfo,
+  MonitoringSummary,
+  ObservedOutcome,
+  PredictionResult,
+} from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -46,6 +55,7 @@ import {
   RiskBadge,
   RiskBar,
 } from "@/components/dashboard/shared"
+import { FeedbackControls } from "@/components/dashboard/feedback-controls"
 
 export function MetricGrid({
   modelInfo,
@@ -190,6 +200,8 @@ export function PredictionPanel({
   onPayloadChange,
   onResetPayload,
   onPredict,
+  feedbackSubmittingRecordId,
+  onSubmitFeedback,
 }: {
   payload: string
   prediction: PredictionResult | null
@@ -197,6 +209,13 @@ export function PredictionPanel({
   onPayloadChange: (payload: string) => void
   onResetPayload: () => void
   onPredict: (event: FormEvent<HTMLFormElement>) => void
+  feedbackSubmittingRecordId: string | null
+  onSubmitFeedback: (payload: {
+    recordId: string
+    modelVersion: string
+    rating: FeedbackRating
+    observedOutcome: ObservedOutcome
+  }) => Promise<void>
 }) {
   return (
     <div className="grid gap-4 xl:grid-cols-[1fr_0.7fr]">
@@ -259,6 +278,14 @@ export function PredictionPanel({
                 <InfoRow label="Risk level" value={prediction.risk_level} />
                 <InfoRow label="Operations log" value="event logged" />
               </div>
+              {prediction.record_id ? (
+                <FeedbackControls
+                  recordId={prediction.record_id}
+                  modelVersion={prediction.model_version}
+                  disabled={feedbackSubmittingRecordId === prediction.record_id}
+                  onSubmit={onSubmitFeedback}
+                />
+              ) : null}
             </div>
           ) : (
             <div className="rounded-lg border border-dashed border-border p-5 text-sm text-muted-foreground">
@@ -271,14 +298,22 @@ export function PredictionPanel({
   )
 }
 
-export function MonitoringPanel({ monitoring }: { monitoring: MonitoringSummary | null }) {
+export function MonitoringPanel({
+  monitoring,
+  feedbackSummary,
+  driftSummary,
+}: {
+  monitoring: MonitoringSummary | null
+  feedbackSummary: FeedbackSummary | null
+  driftSummary: DriftSummary | null
+}) {
   return (
     <div className="grid gap-4 xl:grid-cols-[0.8fr_1.2fr]">
       <Card>
         <CardHeader>
           <CardTitle>Model Operations</CardTitle>
           <CardDescription>
-            Active model versions and prediction volume from serving logs.
+            Serving volume, feedback loop status, and retraining signals.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -300,6 +335,30 @@ export function MonitoringPanel({ monitoring }: { monitoring: MonitoringSummary 
                 <InfoRow
                   label="Latest batch"
                   value={monitoring.latest_batch_id ?? "-"}
+                />
+              </div>
+              <Separator />
+              <div className="grid gap-2 sm:grid-cols-2">
+                <InfoRow
+                  label="Feedback"
+                  value={(feedbackSummary?.total_feedback ?? 0).toLocaleString()}
+                />
+                <InfoRow
+                  label="Disagreement"
+                  value={`${((feedbackSummary?.disagreement_rate ?? 0) * 100).toFixed(1)}%`}
+                />
+                <InfoRow
+                  label="Drift status"
+                  value={formatStatus(driftSummary?.status)}
+                />
+                <InfoRow
+                  label="Retraining"
+                  value={
+                    feedbackSummary?.retraining_candidate ||
+                    driftSummary?.status === "retraining_candidate"
+                      ? "candidate"
+                      : "not required"
+                  }
                 />
               </div>
               <Separator />
@@ -361,6 +420,141 @@ export function MonitoringPanel({ monitoring }: { monitoring: MonitoringSummary 
           </Table>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Feedback outcomes</CardTitle>
+          <CardDescription>
+            Human review and observed flood outcomes from scored locations.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {feedbackSummary ? (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <InfoRow
+                  label="Useful"
+                  value={feedbackSummary.useful_count.toLocaleString()}
+                />
+                <InfoRow
+                  label="Not useful"
+                  value={feedbackSummary.not_useful_count.toLocaleString()}
+                />
+                <InfoRow
+                  label="Observed flood"
+                  value={feedbackSummary.observed_flood_count.toLocaleString()}
+                />
+                <InfoRow
+                  label="No flood"
+                  value={feedbackSummary.observed_no_flood_count.toLocaleString()}
+                />
+              </div>
+              <Separator />
+              {feedbackSummary.top_feedback_districts.length ? (
+                <div className="space-y-2">
+                  {feedbackSummary.top_feedback_districts.map((item) => (
+                    <div
+                      key={item.district}
+                      className="flex items-center justify-between gap-3 text-sm"
+                    >
+                      <span>{item.district}</span>
+                      <Badge variant="outline">{item.count}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyLine />
+              )}
+            </>
+          ) : (
+            <EmptyLine />
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Drift watch</CardTitle>
+          <CardDescription>
+            Recent scored records compared with the seed reference distribution.
+          </CardDescription>
+          <CardAction>
+            <Badge variant="outline" className="gap-1.5">
+              <RefreshCcw className="size-3" />
+              {formatStatus(driftSummary?.status)}
+            </Badge>
+          </CardAction>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {driftSummary ? (
+            <>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <InfoRow
+                  label="Recent sample"
+                  value={driftSummary.sample_size.toLocaleString()}
+                />
+                <InfoRow
+                  label="Reference"
+                  value={driftSummary.reference_size.toLocaleString()}
+                />
+                <InfoRow
+                  label="Risk shift"
+                  value={formatNullable(driftSummary.risk_score_shift.absolute_difference)}
+                />
+                <InfoRow
+                  label="District shift"
+                  value={formatNullable(driftSummary.district_shift.absolute_difference)}
+                />
+              </div>
+              <div className="rounded-lg border border-border p-3 text-sm text-muted-foreground">
+                {driftSummary.recommendation}
+              </div>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead>Feature</TableHead>
+                    <TableHead className="text-right">Recent</TableHead>
+                    <TableHead className="text-right">Reference</TableHead>
+                    <TableHead className="text-right">Shift</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {driftSummary.feature_warnings.length ? (
+                    driftSummary.feature_warnings.map((item) => (
+                      <TableRow key={item.feature}>
+                        <TableCell>{item.feature.replaceAll("_", " ")}</TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatNumber(item.recent_mean, 2)}
+                        </TableCell>
+                        <TableCell className="text-right font-mono">
+                          {formatNumber(item.reference_mean, 2)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <Badge variant="outline">
+                            {(item.relative_change * 100).toFixed(1)}%
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))
+                  ) : (
+                    <TableRow>
+                      <TableCell colSpan={4} className="text-muted-foreground">
+                        No feature warnings for the current sample.
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </TableBody>
+              </Table>
+            </>
+          ) : (
+            <EmptyLine />
+          )}
+        </CardContent>
+      </Card>
     </div>
   )
+}
+
+function formatStatus(value: DriftSummary["status"] | undefined) {
+  return value ? value.replaceAll("_", " ") : "-"
 }

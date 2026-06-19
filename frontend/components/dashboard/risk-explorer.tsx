@@ -11,7 +11,7 @@ import {
   Table2,
 } from "lucide-react"
 
-import { LocationRow } from "@/lib/api"
+import { FeedbackRating, LocationRow, ObservedOutcome } from "@/lib/api"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -65,6 +65,7 @@ import {
   riskMarkerClass,
   ScoreStack,
 } from "@/components/dashboard/shared"
+import { FeedbackControls } from "@/components/dashboard/feedback-controls"
 import { cn } from "@/lib/utils"
 
 export function RiskExplorer({
@@ -76,10 +77,12 @@ export function RiskExplorer({
   predictions,
   loading,
   predictingRecordId,
+  feedbackSubmittingRecordId,
   onDistrictChange,
   onSearchChange,
   onSelectLocation,
   onPredictLocation,
+  onSubmitFeedback,
 }: {
   districts: string[]
   district: string
@@ -89,10 +92,17 @@ export function RiskExplorer({
   predictions: Record<string, ServedScore>
   loading: boolean
   predictingRecordId: string | null
+  feedbackSubmittingRecordId: string | null
   onDistrictChange: (district: string) => void
   onSearchChange: (search: string) => void
   onSelectLocation: (recordId: string) => void
   onPredictLocation: (recordId: string) => void
+  onSubmitFeedback: (payload: {
+    recordId: string
+    modelVersion: string
+    rating: FeedbackRating
+    observedOutcome: ObservedOutcome
+  }) => Promise<void>
 }) {
   const features = useMemo<FeatureCollection<Point, LocationFeatureProperties>>(
     () => ({
@@ -201,7 +211,11 @@ export function RiskExplorer({
                 location={selectedLocation}
                 prediction={selectedPrediction}
                 predicting={predictingRecordId === selectedLocation?.record_id}
+                feedbackSubmitting={
+                  feedbackSubmittingRecordId === selectedLocation?.record_id
+                }
                 onPredictLocation={onPredictLocation}
+                onSubmitFeedback={onSubmitFeedback}
               />
             </div>
           </CardContent>
@@ -339,12 +353,21 @@ function LocationInspector({
   location,
   prediction,
   predicting,
+  feedbackSubmitting,
   onPredictLocation,
+  onSubmitFeedback,
 }: {
   location: LocationRow | null
   prediction: ServedScore | null
   predicting: boolean
+  feedbackSubmitting: boolean
   onPredictLocation: (recordId: string) => void
+  onSubmitFeedback: (payload: {
+    recordId: string
+    modelVersion: string
+    rating: FeedbackRating
+    observedOutcome: ObservedOutcome
+  }) => Promise<void>
 }) {
   if (!location) {
     return (
@@ -447,6 +470,17 @@ function LocationInspector({
         {predicting ? <Loader2 className="animate-spin" /> : <Play />}
         Predict selected
       </Button>
+
+      {prediction?.record_id ? (
+        <div className="mt-3">
+          <FeedbackControls
+            recordId={prediction.record_id}
+            modelVersion={prediction.model_version}
+            disabled={feedbackSubmitting}
+            onSubmit={onSubmitFeedback}
+          />
+        </div>
+      ) : null}
     </div>
   )
 }

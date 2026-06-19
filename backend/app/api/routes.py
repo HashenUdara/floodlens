@@ -11,6 +11,11 @@ from app.services.decision_intelligence_service import (
     DecisionIntelligenceService,
     get_decision_intelligence_service,
 )
+from app.services.drift_monitoring_service import (
+    DriftMonitoringService,
+    get_drift_monitoring_service,
+)
+from app.services.feedback_service import FeedbackService, get_feedback_service
 from app.services.location_service import LocationService, get_location_service
 from app.services.model_score_store import ModelScoreStore, get_model_score_store
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
@@ -31,6 +36,17 @@ class BatchPredictRequest(BaseModel):
     district: str | None = None
     limit: int = Field(default=100, ge=1)
     record_ids: list[str] | None = None
+
+
+class FeedbackRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_id: str
+    model_version: str
+    rating: str
+    observed_outcome: str = "unknown"
+    notes: str | None = None
+    source: str = "dashboard"
 
 
 @router.get("/health")
@@ -82,6 +98,35 @@ def monitoring_summary(
     log_service: PredictionLogService = Depends(get_prediction_log_service),
 ) -> dict[str, Any]:
     return log_service.summary()
+
+
+@router.get("/monitoring/drift")
+def monitoring_drift(
+    service: DriftMonitoringService = Depends(get_drift_monitoring_service),
+) -> dict[str, Any]:
+    return service.summary()
+
+
+@router.post("/feedback")
+def submit_feedback(
+    payload: FeedbackRequest,
+    service: FeedbackService = Depends(get_feedback_service),
+) -> dict[str, Any]:
+    return service.submit_feedback(
+        record_id=payload.record_id,
+        model_version=payload.model_version,
+        rating=payload.rating,
+        observed_outcome=payload.observed_outcome,
+        notes=payload.notes,
+        source=payload.source,
+    )
+
+
+@router.get("/feedback/summary")
+def feedback_summary(
+    service: FeedbackService = Depends(get_feedback_service),
+) -> dict[str, Any]:
+    return service.summary()
 
 
 @router.get("/model-scores")
