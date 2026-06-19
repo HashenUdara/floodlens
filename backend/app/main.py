@@ -1,11 +1,22 @@
-"""FastAPI application for serving FloodLens model predictions."""
+"""FastAPI application for FloodLens model and knowledge services."""
+
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.document_routes import router as document_router
 from app.api.routes import router
+from app.services.document_service import reconcile_interrupted_documents
 
-app = FastAPI(title="FloodLens API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    reconcile_interrupted_documents()
+    yield
+
+
+app = FastAPI(title="FloodLens API", version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -19,3 +30,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 app.include_router(router)
+app.include_router(document_router)

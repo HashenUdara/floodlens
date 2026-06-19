@@ -162,7 +162,7 @@ export function OverviewPanel({
             Risk levels observed from served predictions and logged API activity.
           </CardDescription>
         </CardHeader>
-        <CardContent className="space-y-4">
+        <CardContent className="flex flex-col gap-4">
           {loading || !monitoring ? (
             <InfoSkeleton />
           ) : (

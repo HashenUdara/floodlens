@@ -9,6 +9,7 @@ export type ActiveView =
   | "priority"
   | "prediction"
   | "monitoring"
+  | "knowledge"
   | "copilot"
 
 export type LocationFeatureProperties = {

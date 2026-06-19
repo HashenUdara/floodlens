@@ -11,6 +11,13 @@ system.
 
 > Flood risk prediction, explanation, and response prioritization for Sri Lanka.
 
+## Project Documents
+
+- [Technical architecture and MLOps document](docs/floodlens_technical_document.md)
+- [Product and business document](docs/floodlens_product_document.md)
+- [Presentation slide content and demo script](docs/floodlens_presentation_content.md)
+- [Zero-to-hero setup guide](docs/setup_guide.md)
+
 ## Product Positioning
 
 FloodLens helps authorities, planners, insurers, logistics teams, and response
@@ -23,11 +30,10 @@ coordinators answer five practical questions:
 - What evidence from model outputs, monitoring signals, feedback, and uploaded
   documents supports that decision?
 
-The next product layer is **FloodLens Intelligent Copilot**: a GPT-powered,
-tool-grounded assistant that turns model scores, monitoring state, field
-feedback, drift signals, and response documents into defensible operational
-briefs. It is positioned as an intelligent Copilot, but not as a generic GPT
-wrapper.
+**FloodLens Intelligent Copilot** is a GPT-powered, tool-grounded assistant that
+turns model scores, monitoring state, field feedback, drift signals, and
+retrieved response documents into defensible operational briefs. It is
+positioned as an intelligent Copilot, not as a generic GPT wrapper.
 
 FloodLens is a decision-support system, not an official emergency alert system.
 It should not claim live disaster authority unless connected to verified
@@ -50,6 +56,9 @@ The repository already contains a working MLOps foundation:
 - batch model scoring with latest model score storage
 - feedback capture and drift/retraining monitoring
 - OpenAI-powered Intelligent Copilot in the Next.js dashboard
+- Knowledge Library for PDF, TXT, and Markdown response documents
+- OpenAI embeddings with PostgreSQL/pgvector hybrid retrieval
+- Copilot document search with page-level citations
 - split dashboard component structure under `frontend/components/dashboard/`
 
 Implemented backend APIs:
@@ -69,6 +78,14 @@ Implemented backend APIs:
 - `GET /district-summary`
 - `GET /high-risk-locations`
 - `GET /emergency-priority`
+- `POST /documents`
+- `GET /documents`
+- `GET /documents/summary`
+- `POST /documents/search`
+- `GET /documents/{document_id}`
+- `GET /documents/{document_id}/file`
+- `DELETE /documents/{document_id}`
+- `POST /documents/{document_id}/reindex`
 
 Current business layer:
 
@@ -101,6 +118,8 @@ The current backend has useful service boundaries:
   model/field disagreement.
 - `DriftMonitoringService`: compares recently scored records against the seed
   reference distribution and produces retraining signals.
+- document services: validate, store, extract, chunk, embed, index, retrieve,
+  reindex, and delete operational knowledge sources.
 
 The frontend has been split into focused dashboard components:
 
@@ -117,11 +136,14 @@ The frontend has been split into focused dashboard components:
 - baseline versus model score comparison
 - feedback controls for scored places
 - feedback and drift cards in the monitoring view
+- Knowledge Library with upload progress, filters, indexing status, reindex,
+  delete, and document access
+- cited document evidence in the Intelligent Copilot
 - component modules under `frontend/components/dashboard/`
 
-The most important remaining product gap is now the intelligent Copilot layer:
-natural-language decision support grounded in FloodLens tools and, later,
-uploaded response documents.
+The most important remaining product gap is production hardening: deployed RAG
+verification, retrieval-quality evaluation, complete CI/CD, durable background
+workers, authentication, and final demo rehearsal.
 
 ## Winning Readiness Against Judging Criteria
 
@@ -135,16 +157,15 @@ aggregation, prioritization, feedback, drift monitoring, and a grounded Copilot.
 | Scenario Understanding & Solution Design (20%) | Strong | Clear flood-risk decision-support product, monitored-place layer, recommended actions, district command views, limitations stated | Final demo story tied tightly to response planning |
 | Technical Implementation (30%) | Strong | Feature engineering pipeline, ensemble model artifact, FastAPI serving, provider layer, decision APIs, batch scoring, frontend dashboard, tests | Richer evaluation/priority outputs and final polish |
 | MLOps & Production Readiness (25%) | Strong | model bundle, metadata, API serving, prediction logs, batch scoring, feedback loop, drift summary, tests | CI/CD, Docker verification, retraining automation story |
-| Innovation & Problem Solving (10%) | Strong path | business risk drivers, corrected presentation coordinates, operational priority, district command, emergency priority workflow, feedback and drift signals | GPT-powered grounded Copilot and document RAG |
+| Innovation & Problem Solving (10%) | Strong | business risk drivers, operational priority, feedback/drift signals, grounded Copilot, and document RAG | retrieval-quality evidence and final demo polish |
 | Viva Evaluation (15%) | Good but needs polish | architecture rationale and README positioning | final architecture diagram, demo script, trade-off notes, known limitation answers |
 
 The highest-impact missing pieces are:
 
-1. **Document RAG Extension**
-   - uploaded SOPs, field reports, policies, and response documents
-   - embeddings and pgvector retrieval
-   - cited answers that combine document evidence with FloodLens model,
-     monitoring, feedback, and drift data.
+1. **RAG Verification and Evaluation**
+   - verify the full flow against the deployed PostgreSQL/pgvector environment
+   - measure retrieval relevance and citation correctness
+   - test unsupported questions and prompt-injection resistance.
 
 2. **Deployment and CI Evidence**
    - GitHub Actions
@@ -178,6 +199,12 @@ Completed high-impact pieces:
    - AI Elements chat UI
    - tool calls to internal FloodLens APIs for district, priority, score,
      feedback, monitoring, and drift evidence.
+
+5. **Knowledge Library and Document RAG**
+   - upload and manage SOPs, policies, and field reports
+   - OpenAI embeddings stored in PostgreSQL/pgvector
+   - hybrid semantic and full-text retrieval
+   - Copilot document-search tool with page-level citations.
 
 ## Ultimate UX Plan
 
@@ -465,15 +492,24 @@ Acceptance criteria status:
 - Copilot does not call the model directly when existing decision APIs already
   provide the required facts.
 
-### Phase 4B: Document RAG Extension
+### Phase 4B: Document RAG Extension — Complete Locally
 
-Add document intelligence after the tool-grounded Copilot works:
+Implemented:
 
 - uploaded PDFs/SOPs/field reports
-- chunking and embeddings
-- Postgres with pgvector
-- cited answers that combine retrieved documents with FloodLens model,
-  monitoring, feedback, and drift data
+- validation, duplicate detection, extraction, and token-aware chunking
+- OpenAI embeddings and PostgreSQL/pgvector storage
+- hybrid semantic and full-text retrieval
+- Knowledge Library upload and lifecycle UI
+- Copilot document-search tool and page-level citations
+- focused document and retrieval tests
+- synthetic retrieval fixture and Recall@5/MRR evaluation script
+
+Remaining before final submission:
+
+- deployed end-to-end pgvector verification
+- live retrieval and grounded-answer metric capture against the final deployment
+- durable ingestion workers, OCR, and production access controls
 
 RAG is framed as a document intelligence extension, not as the source of model
 predictions.
@@ -521,13 +557,16 @@ Acceptance criteria:
 9. Open District Command and show district-level risk comparison.
 10. Run batch scoring for a district and show model score versus baseline risk.
 11. Open Priority Queue and show the response-planning ranking.
-12. Ask FloodLens Intelligent Copilot:
+12. Open Knowledge Library, upload or show an indexed SOP, and confirm its
+    ready status.
+13. Ask FloodLens Intelligent Copilot:
     - "Why is this location risky?"
     - "Which places should be prioritized first?"
     - "Is retraining needed based on feedback and drift?"
     - "Generate a district action brief using the current model and monitoring
       evidence."
-13. End on MLOps monitoring: logs, model version, feedback, drift/retraining
+14. Ask one document-grounded action question and open its page citation.
+15. End on MLOps monitoring: logs, model version, feedback, drift/retraining
     path.
 
 Best judging line:
@@ -563,9 +602,13 @@ PYTHONPATH=backend ml/.venv/bin/python -m pytest backend/tests -q
 Start backend:
 
 ```bash
-cd backend
-../ml/.venv/bin/uvicorn app.main:app --reload
+OPENAI_API_KEY=replace-with-your-openai-api-key \
+  docker compose -f infra/docker-compose.yml up --build db backend
 ```
+
+This starts PostgreSQL/pgvector, runs Alembic migrations, and starts FastAPI.
+The backend uses the OpenAI key for document embeddings. Next.js uses the same
+key server-side for Copilot streaming; never prefix it with `NEXT_PUBLIC_`.
 
 Start frontend:
 
@@ -613,4 +656,9 @@ artifacts/flood-risk-v3/model_bundle.joblib
 - The product is not connected to live rainfall, river-gauge, satellite, or
   official emergency feeds yet.
 - JSONL logging is used for speed; database-backed storage should come later.
+- document ingestion uses local storage and FastAPI background tasks; production
+  requires object storage and durable workers.
+- the Knowledge Library is a single workspace without authentication in the
+  hackathon build.
+- scanned PDFs require OCR, which is not implemented yet.
 - FloodLens is decision support, not an official alerting system.

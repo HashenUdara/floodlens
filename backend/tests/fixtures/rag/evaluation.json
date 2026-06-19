@@ -1,0 +1,24 @@
+{
+  "documents": [
+    {
+      "file": "colombo_response_sop.md",
+      "title": "Colombo Flood Response SOP",
+      "document_type": "sop",
+      "district": "Colombo"
+    }
+  ],
+  "queries": [
+    {
+      "query": "What should teams inspect before recommending road closures?",
+      "expected_title": "Colombo Flood Response SOP"
+    },
+    {
+      "query": "How should limited evacuation access be handled?",
+      "expected_title": "Colombo Flood Response SOP"
+    },
+    {
+      "query": "Can FloodLens issue an official evacuation order?",
+      "expected_title": "Colombo Flood Response SOP"
+    }
+  ]
+}

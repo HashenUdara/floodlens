@@ -235,3 +235,4 @@ ml/registry/
 ml/submissions/
 ml/catboost_info/
 backend/logs/
+backend/uploads/

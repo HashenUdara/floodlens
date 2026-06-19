@@ -1,6 +1,8 @@
 import { tool } from "ai"
 import { z } from "zod"
 
+import type { DocumentSearchResponse } from "@/lib/documents"
+
 const API_BASE_URL =
   process.env.FLOODLENS_API_BASE_URL?.replace(/\/$/, "") ??
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
@@ -12,7 +14,8 @@ type QueryParams = Record<string, string | number | undefined | null>
 
 async function floodLensRequest<T>(
   path: string,
-  params?: QueryParams
+  params?: QueryParams,
+  init?: RequestInit
 ): Promise<T> {
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params ?? {})) {
@@ -23,6 +26,11 @@ async function floodLensRequest<T>(
 
   const suffix = query.toString() ? `?${query.toString()}` : ""
   const response = await fetch(`${API_BASE_URL}${path}${suffix}`, {
+    ...init,
+    headers: {
+      ...(init?.body ? { "Content-Type": "application/json" } : {}),
+      ...init?.headers,
+    },
     cache: "no-store",
   })
 
@@ -155,6 +163,37 @@ export const copilotTools = {
     execute: async () => ({
       source: "monitoring-drift",
       data: await floodLensRequest("/monitoring/drift"),
+    }),
+  }),
+
+  searchDocuments: tool({
+    description:
+      "Search uploaded SOPs, policies, and field reports for cited operational evidence. Use this before answering document-guidance or action-procedure questions.",
+    inputSchema: z.object({
+      query: z.string().min(1).max(2000),
+      district: z.string().optional(),
+      documentTypes: z
+        .array(z.enum(["sop", "policy", "field_report", "other"]))
+        .optional(),
+      documentIds: z.array(z.string()).max(10).optional(),
+      limit: z.number().int().positive().max(6).optional(),
+    }),
+    execute: async ({ query, district, documentTypes, documentIds, limit }) => ({
+      source: "document-retrieval",
+      data: await floodLensRequest<DocumentSearchResponse>(
+        "/documents/search",
+        undefined,
+        {
+          method: "POST",
+          body: JSON.stringify({
+            query,
+            district,
+            document_types: documentTypes,
+            document_ids: documentIds,
+            limit: Math.min(limit ?? 6, 6),
+          }),
+        }
+      ),
     }),
   }),
 }

@@ -14,6 +14,7 @@ Install these first:
 - Python 3.11
 - Node.js 20 or newer
 - pnpm
+- Docker Desktop or another Docker Compose installation
 
 Recommended pnpm install:
 
@@ -182,11 +183,21 @@ Expected result:
 
 ## 8. Start The App
 
-Terminal 1: start backend.
+Create the root environment file used by Docker Compose:
 
 ```bash
-cd backend
-../ml/.venv/bin/uvicorn app.main:app --reload
+cat > .env <<'EOF'
+OPENAI_API_KEY=replace-with-your-openai-api-key
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+PUBLIC_API_BASE_URL=http://127.0.0.1:8000
+EOF
+```
+
+Terminal 1: start PostgreSQL/pgvector and FastAPI. Alembic migrations run
+automatically before Uvicorn starts.
+
+```bash
+docker compose -f infra/docker-compose.yml up --build db backend
 ```
 
 Backend URL:
@@ -235,6 +246,10 @@ Use this flow to confirm the product works:
 12. Confirm model-scored counts update.
 13. Open `Model Operations`.
 14. Confirm single and batch prediction counts are visible.
+15. Open `Knowledge Library`.
+16. Upload `backend/tests/fixtures/rag/colombo_response_sop.md` as a Response SOP scoped to Colombo.
+17. Wait for the status to change from `Queued` or `Processing` to `Ready`.
+18. Click `Ask Copilot`, submit the prepared question, and open a citation.
 
 ## 10. Useful API Commands
 
@@ -276,6 +291,33 @@ Monitoring summary:
 curl http://127.0.0.1:8000/monitoring/summary
 ```
 
+Upload a document:
+
+```bash
+curl -X POST http://127.0.0.1:8000/documents \
+  -F "file=@backend/tests/fixtures/rag/colombo_response_sop.md;type=text/markdown" \
+  -F "title=Colombo Flood Response SOP" \
+  -F "document_type=sop" \
+  -F "district=Colombo"
+```
+
+List and search indexed knowledge:
+
+```bash
+curl http://127.0.0.1:8000/documents
+curl -X POST http://127.0.0.1:8000/documents/search \
+  -H "Content-Type: application/json" \
+  -d '{"query":"What should be inspected before road closures?","district":"Colombo","limit":5}'
+```
+
+Evaluate retrieval after the fixture is ready:
+
+```bash
+ml/.venv/bin/python scripts/evaluate_retrieval.py
+```
+
+Use `--upload-fixtures` to upload and index the fixture automatically.
+
 ## 11. Generated Files
 
 These files are intentionally not committed:
@@ -288,6 +330,7 @@ data/versioned/*
 artifacts/flood-risk-v3/model_bundle.joblib
 artifacts/flood-risk-v3/metadata.json
 backend/logs/*
+backend/uploads/*
 ml/.venv/
 backend/.venv/
 frontend/node_modules/
@@ -382,6 +425,32 @@ OPENAI_MODEL=gpt-5.5
 ```
 
 Restart `pnpm dev` after changing `.env.local`.
+
+### Knowledge Library: not configured
+
+Prediction APIs can run without PostgreSQL, but document endpoints require
+`DATABASE_URL`. Start the Compose stack, or run only pgvector and migrate it:
+
+```bash
+docker compose -f infra/docker-compose.yml up -d db
+export DATABASE_URL=postgresql+psycopg://floodlens:floodlens@127.0.0.1:5432/floodlens
+ml/.venv/bin/alembic -c backend/alembic.ini upgrade head
+```
+
+### Document indexing failed
+
+Confirm `OPENAI_API_KEY` is available to the backend. Image-only PDFs are not
+supported yet and return an OCR-specific failure. Use a PDF with selectable
+text, TXT, or Markdown.
+
+### Reset local RAG data
+
+This removes PostgreSQL and uploaded-document volumes while preserving source
+code and model artifacts:
+
+```bash
+docker compose -f infra/docker-compose.yml down -v
+```
 
 ### Port already in use
 

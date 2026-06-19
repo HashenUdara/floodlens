@@ -35,7 +35,6 @@ import {
 import { sampleRecord } from "@/lib/sample-record"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import {
   ALL_DISTRICTS,
   ActiveView,
@@ -45,9 +44,9 @@ import {
 import {
   DashboardSidebar,
   MobileHeader,
-  NAV_ITEMS,
 } from "@/components/dashboard/shell"
 import { CopilotPanel } from "@/components/dashboard/copilot-panel"
+import { KnowledgeLibrary } from "@/components/dashboard/knowledge-library"
 import { DistrictCommandPanel, PriorityQueuePanel } from "@/components/dashboard/decision-panels"
 import { RiskExplorer } from "@/components/dashboard/risk-explorer"
 import {
@@ -57,11 +56,12 @@ import {
   PredictionPanel,
 } from "@/components/dashboard/status-panels"
 import { StatusPill } from "@/components/dashboard/shared"
+import type { KnowledgeDocument } from "@/lib/documents"
 
 const initialPayload = JSON.stringify(sampleRecord, null, 2)
 
 export default function Home() {
-  const [activeView, setActiveView] = useState<ActiveView>("explorer")
+  const [activeView, setActiveView] = useState<ActiveView>("overview")
   const [apiState, setApiState] = useState<ApiState>("checking")
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
   const [monitoring, setMonitoring] = useState<MonitoringSummary | null>(null)
@@ -98,6 +98,7 @@ export default function Home() {
   const [feedbackSubmittingRecordId, setFeedbackSubmittingRecordId] =
     useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [copilotDraft, setCopilotDraft] = useState<string | null>(null)
 
   async function refreshOperations() {
     const [summary, feedback, drift] = await Promise.all([
@@ -343,6 +344,13 @@ export default function Home() {
     }
   }
 
+  function handleAskDocument(document: KnowledgeDocument) {
+    setCopilotDraft(
+      `Use the Knowledge Library document "${document.title}" (document ID ${document.id}) to summarize the operational guidance, then explain how it should be applied with FloodLens risk and priority evidence. Cite the document pages used.`
+    )
+    setActiveView("copilot")
+  }
+
   return (
     <main className="min-h-screen bg-background text-foreground">
       <div className="flex min-h-screen">
@@ -412,37 +420,25 @@ export default function Home() {
               </Alert>
             ) : null}
 
-            <MetricGrid
-              modelInfo={modelInfo}
-              monitoring={monitoring}
-              loading={loadingDashboard}
-            />
+            <div className="flex flex-col gap-4">
+              {activeView === "overview" ? (
+                <>
+                  <MetricGrid
+                    modelInfo={modelInfo}
+                    monitoring={monitoring}
+                    loading={loadingDashboard}
+                  />
+                  <OverviewPanel
+                    apiState={apiState}
+                    modelInfo={modelInfo}
+                    monitoring={monitoring}
+                    riskTotal={riskTotal}
+                    loading={loadingDashboard}
+                  />
+                </>
+              ) : null}
 
-            <Tabs
-              value={activeView}
-              onValueChange={(value) => setActiveView(value as ActiveView)}
-              className="gap-4"
-            >
-              <TabsList className="hidden w-fit lg:flex">
-                {NAV_ITEMS.map((item) => (
-                  <TabsTrigger key={item.value} value={item.value}>
-                    <span className="[&_svg]:size-4">{item.icon}</span>
-                    {item.label}
-                  </TabsTrigger>
-                ))}
-              </TabsList>
-
-              <TabsContent value="overview">
-                <OverviewPanel
-                  apiState={apiState}
-                  modelInfo={modelInfo}
-                  monitoring={monitoring}
-                  riskTotal={riskTotal}
-                  loading={loadingDashboard}
-                />
-              </TabsContent>
-
-              <TabsContent value="explorer">
+              {activeView === "explorer" ? (
                 <RiskExplorer
                   districts={districts}
                   district={district}
@@ -459,9 +455,9 @@ export default function Home() {
                   onPredictLocation={handlePredictLocation}
                   onSubmitFeedback={handleSubmitFeedback}
                 />
-              </TabsContent>
+              ) : null}
 
-              <TabsContent value="districts">
+              {activeView === "districts" ? (
                 <DistrictCommandPanel
                   district={district}
                   districts={districts}
@@ -475,9 +471,9 @@ export default function Home() {
                   onBatchScore={handleBatchScore}
                   onOpenLocation={handleOpenLocation}
                 />
-              </TabsContent>
+              ) : null}
 
-              <TabsContent value="priority">
+              {activeView === "priority" ? (
                 <PriorityQueuePanel
                   district={district}
                   districts={districts}
@@ -490,9 +486,9 @@ export default function Home() {
                   onBatchScore={handleBatchScore}
                   onOpenLocation={handleOpenLocation}
                 />
-              </TabsContent>
+              ) : null}
 
-              <TabsContent value="prediction">
+              {activeView === "prediction" ? (
                 <PredictionPanel
                   payload={payload}
                   prediction={prediction}
@@ -503,20 +499,31 @@ export default function Home() {
                   feedbackSubmittingRecordId={feedbackSubmittingRecordId}
                   onSubmitFeedback={handleSubmitFeedback}
                 />
-              </TabsContent>
+              ) : null}
 
-              <TabsContent value="monitoring">
+              {activeView === "monitoring" ? (
                 <MonitoringPanel
                   monitoring={monitoring}
                   feedbackSummary={feedbackSummary}
                   driftSummary={driftSummary}
                 />
-              </TabsContent>
+              ) : null}
 
-              <TabsContent value="copilot">
-                <CopilotPanel />
-              </TabsContent>
-            </Tabs>
+              {activeView === "knowledge" ? (
+                <KnowledgeLibrary
+                  districts={districts}
+                  onAskCopilot={handleAskDocument}
+                />
+              ) : null}
+
+              {activeView === "copilot" ? (
+                <CopilotPanel
+                  initialPrompt={copilotDraft}
+                  onInitialPromptConsumed={() => setCopilotDraft(null)}
+                  onOpenKnowledge={() => setActiveView("knowledge")}
+                />
+              ) : null}
+            </div>
           </div>
         </section>
       </div>

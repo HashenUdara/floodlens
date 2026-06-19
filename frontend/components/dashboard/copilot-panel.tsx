@@ -47,6 +47,7 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool"
 import { Badge } from "@/components/ui/badge"
+import { Button } from "@/components/ui/button"
 import {
   Card,
   CardAction,
@@ -63,8 +64,16 @@ const SUGGESTIONS = [
   "Generate a district action brief for Colombo.",
 ]
 
-export function CopilotPanel() {
-  const [input, setInput] = useState("")
+export function CopilotPanel({
+  initialPrompt,
+  onInitialPromptConsumed,
+  onOpenKnowledge,
+}: {
+  initialPrompt?: string | null
+  onInitialPromptConsumed?: () => void
+  onOpenKnowledge: () => void
+}) {
+  const [input, setInput] = useState(initialPrompt ?? "")
   const transport = useMemo(
     () => new DefaultChatTransport({ api: "/api/copilot" }),
     []
@@ -79,6 +88,7 @@ export function CopilotPanel() {
     if (!clean) return
     sendMessage({ text: clean })
     setInput("")
+    onInitialPromptConsumed?.()
   }
 
   function handleSubmit(message: PromptInputMessage) {
@@ -97,7 +107,10 @@ export function CopilotPanel() {
             GPT-powered operations assistant grounded in FloodLens model,
             monitoring, feedback, drift, and priority data.
           </CardDescription>
-          <CardAction>
+          <CardAction className="flex items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={onOpenKnowledge}>
+              <FileText /> Upload knowledge
+            </Button>
             <Badge variant="outline" className="font-mono">
               OpenAI / {process.env.NEXT_PUBLIC_OPENAI_MODEL_LABEL ?? "GPT"}
             </Badge>
@@ -138,8 +151,11 @@ export function CopilotPanel() {
                 <PromptInputBody>
                   <PromptInputTextarea
                     value={input}
-                    onChange={(event) => setInput(event.currentTarget.value)}
-                    placeholder="Ask about district risk, a record ID, priority queues, monitoring, feedback, or retraining..."
+                    onChange={(event) => {
+                      setInput(event.currentTarget.value)
+                      onInitialPromptConsumed?.()
+                    }}
+                    placeholder="Ask about risk, priorities, model operations, or uploaded response documents..."
                     className="min-h-20"
                   />
                 </PromptInputBody>
@@ -180,8 +196,8 @@ export function CopilotPanel() {
           />
           <InfoItem
             icon={<FileText />}
-            title="RAG-ready, not RAG yet"
-            detail="Document upload, embeddings, and pgvector come after this tool-grounded layer is stable."
+            title="Cited document evidence"
+            detail="Searches indexed SOPs, policies, and field reports through hybrid pgvector retrieval."
           />
           <InfoItem
             icon={<ShieldAlert />}
@@ -200,19 +216,44 @@ function CopilotMessage({
   message: FloodLensCopilotMessage
 }) {
   const toolParts = message.parts.filter(isToolUIPart)
+  const documentSources = message.parts.flatMap((part) => {
+    if (
+      part.type !== "tool-searchDocuments" ||
+      part.state !== "output-available"
+    ) {
+      return []
+    }
+    return part.output.data.results.map((result) => ({
+      href: result.citation_url,
+      title: `${result.title}${result.page ? ` · page ${result.page}` : ""}`,
+    }))
+  })
+  const operationalParts = toolParts.filter(
+    (part) => getToolName(part) !== "searchDocuments"
+  )
+  const sourceCount = operationalParts.length + documentSources.length
 
   return (
     <div className="space-y-2">
-      {message.role === "assistant" && toolParts.length > 0 ? (
+      {message.role === "assistant" && sourceCount > 0 ? (
         <Sources>
-          <SourcesTrigger count={toolParts.length}>
+          <SourcesTrigger count={sourceCount}>
             <span className="font-medium">
-              Used {toolParts.length} FloodLens source
-              {toolParts.length === 1 ? "" : "s"}
+              Used {sourceCount} FloodLens source
+              {sourceCount === 1 ? "" : "s"}
             </span>
           </SourcesTrigger>
           <SourcesContent>
-            {toolParts.map((part) => (
+            {documentSources.map((source) => (
+              <Source
+                key={`${source.href}-${source.title}`}
+                href={source.href}
+                title={source.title}
+                target="_blank"
+                rel="noreferrer"
+              />
+            ))}
+            {operationalParts.map((part) => (
               <Source
                 key={part.toolCallId}
                 href={toolHref(getToolName(part))}
@@ -315,11 +356,15 @@ function toolTitle(toolName: string) {
     getMonitoringSummary: "Monitoring summary",
     getFeedbackSummary: "Feedback summary",
     getDriftSummary: "Drift summary",
+    searchDocuments: "Knowledge search",
   }
   return titles[toolName] ?? toolName
 }
 
 function toolHref(toolName: string) {
+  const apiBaseUrl =
+    process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ??
+    "http://127.0.0.1:8000"
   const paths: Record<string, string> = {
     getModelInfo: "/model-info",
     getDistrictSummary: "/district-summary",
@@ -331,5 +376,5 @@ function toolHref(toolName: string) {
     getFeedbackSummary: "/feedback/summary",
     getDriftSummary: "/monitoring/drift",
   }
-  return paths[toolName] ?? "#"
+  return paths[toolName] ? `${apiBaseUrl}${paths[toolName]}` : "#"
 }
