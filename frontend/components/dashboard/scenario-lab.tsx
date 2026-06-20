@@ -767,9 +767,9 @@ function AssumptionControl({
           step={field.step}
           value={safeValue}
           onChange={(event) => onChange(Number(event.target.value))}
-          className="h-2 flex-1 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+          className="scenario-assumption-range h-3 flex-1 cursor-pointer appearance-none rounded-full"
           style={{
-            background: `linear-gradient(to right, hsl(var(--primary)) ${percentage}%, hsl(var(--muted)) ${percentage}%)`,
+            background: `linear-gradient(to right, var(--primary) ${percentage}%, var(--muted) ${percentage}%)`,
           }}
         />
         <span className="w-16 text-right text-xs text-muted-foreground">{field.highLabel}</span>
