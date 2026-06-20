@@ -5,6 +5,7 @@ export type ApiState = "checking" | "online" | "offline"
 export type ActiveView =
   | "overview"
   | "explorer"
+  | "scenario"
   | "districts"
   | "priority"
   | "prediction"

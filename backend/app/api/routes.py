@@ -2,10 +2,11 @@
 
 from typing import Any
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import text
 
+from app.services.action_report_service import ActionReportService
 from app.services.batch_scoring_service import BatchScoringService
 from app.core.settings import settings
 from app.db.database import get_engine
@@ -23,6 +24,7 @@ from app.services.location_service import LocationService, get_location_service
 from app.services.model_score_store import ModelScoreStore, get_model_score_store
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
 from app.services.predictor_service import PredictorService, get_predictor_service
+from app.services.scenario_service import ScenarioService, get_scenario_service
 from app.services.system_monitoring_service import (
     SystemMonitoringService,
     get_system_monitoring_service,
@@ -54,6 +56,30 @@ class FeedbackRequest(BaseModel):
     observed_outcome: str = "unknown"
     notes: str | None = None
     source: str = "dashboard"
+
+
+class ScenarioContextRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    latitude: float
+    longitude: float
+    district: str | None = None
+    place_name: str | None = None
+
+
+class ScenarioSimulateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    record_id: str | None = None
+    location: dict[str, Any] | None = None
+    overrides: dict[str, Any] = Field(default_factory=dict)
+
+
+class ActionReportRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    scenario: dict[str, Any]
+    citations: list[dict[str, Any]] = Field(default_factory=list)
 
 
 @router.get("/health")
@@ -108,6 +134,59 @@ def predict(
     log_service: PredictionLogService = Depends(get_prediction_log_service),
 ) -> dict[str, Any]:
     return service.predict(payload.record, log_service=log_service)
+
+
+@router.post("/scenario/context")
+def scenario_context(
+    payload: ScenarioContextRequest,
+    service: ScenarioService = Depends(get_scenario_service),
+) -> dict[str, Any]:
+    return service.context(
+        latitude=payload.latitude,
+        longitude=payload.longitude,
+        district=payload.district,
+        place_name=payload.place_name,
+    )
+
+
+@router.post("/scenario/simulate")
+def scenario_simulate(
+    payload: ScenarioSimulateRequest,
+    service: ScenarioService = Depends(get_scenario_service),
+) -> dict[str, Any]:
+    try:
+        return service.simulate(
+            record_id=payload.record_id,
+            location=payload.location,
+            overrides=payload.overrides,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={"message": str(exc)},
+        ) from exc
+
+
+@router.post("/reports/action")
+def action_report(
+    payload: ActionReportRequest,
+    log_service: PredictionLogService = Depends(get_prediction_log_service),
+    feedback_service: FeedbackService = Depends(get_feedback_service),
+    drift_service: DriftMonitoringService = Depends(get_drift_monitoring_service),
+) -> Response:
+    pdf = ActionReportService().build_pdf(
+        scenario=payload.scenario,
+        monitoring=log_service.summary(),
+        feedback=feedback_service.summary(),
+        drift=drift_service.summary(),
+        citations=payload.citations,
+    )
+    filename = f"floodlens-action-{payload.scenario.get('record_id') or 'scenario'}.pdf"
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.post("/batch-predict")

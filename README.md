@@ -56,6 +56,7 @@ The repository already contains a working MLOps foundation:
 - provider-backed district and priority intelligence
 - batch model scoring with latest model score storage
 - feedback capture and drift/retraining monitoring
+- Scenario Lab for geofenced what-if assessment and PDF action reports
 - OpenAI-powered Intelligent Copilot in the Next.js dashboard
 - Knowledge Library for PDF, TXT, and Markdown response documents
 - OpenAI embeddings with PostgreSQL/pgvector hybrid retrieval
@@ -67,6 +68,9 @@ Implemented backend APIs:
 - `GET /health`
 - `GET /model-info`
 - `POST /predict`
+- `POST /scenario/context`
+- `POST /scenario/simulate`
+- `POST /reports/action`
 - `POST /batch-predict`
 - `GET /monitoring/summary`
 - `GET /monitoring/drift`
@@ -519,6 +523,22 @@ Remaining before final submission:
 RAG is framed as a document intelligence extension, not as the source of model
 predictions.
 
+### Phase 4C: Scenario Lab and Action Reports — Complete
+
+Implemented:
+
+- Sri Lanka geofence validation for custom scenario points
+- optional API-enhanced context enrichment with local fallback
+- Scenario Lab dashboard view for monitored records and map-clicked points
+- editable what-if assumptions for rainfall, elevation, river distance,
+  evacuation distance, exposure, history, and infrastructure
+- `POST /scenario/context` and `POST /scenario/simulate`
+- scenario predictions logged with source `scenario`
+- backend-generated PDF action reports through `POST /reports/action`
+
+Scenario Lab is framed as controlled decision support. It does not claim live
+rainfall, official warnings, or evacuation authority.
+
 ### Phase 5: Deployment and CI/CD Polish
 
 Make the project reproducible:
@@ -629,6 +649,8 @@ NEXT_PUBLIC_API_BASE_URL=http://127.0.0.1:8000
 OPENAI_API_KEY=replace-with-your-openai-api-key
 OPENAI_MODEL=gpt-5.5
 NEXT_PUBLIC_OPENAI_MODEL_LABEL=gpt-5.5
+SCENARIO_EXTERNAL_ENRICHMENT=false
+SCENARIO_CONTEXT_TIMEOUT_S=3
 ```
 
 Run frontend checks:

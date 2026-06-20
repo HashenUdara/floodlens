@@ -60,6 +60,10 @@ class Settings:
     public_api_base_url = os.getenv(
         "PUBLIC_API_BASE_URL", "http://127.0.0.1:8000"
     ).rstrip("/")
+    scenario_external_enrichment = os.getenv(
+        "SCENARIO_EXTERNAL_ENRICHMENT", "false"
+    ).lower() in {"1", "true", "yes"}
+    scenario_context_timeout_s = float(os.getenv("SCENARIO_CONTEXT_TIMEOUT_S", "3"))
 
 
 settings = Settings()

@@ -9,6 +9,7 @@ import {
   MapPinned,
   Menu,
   Play,
+  SlidersHorizontal,
   Waves,
 } from "lucide-react"
 
@@ -34,6 +35,7 @@ export const NAV_ITEMS: Array<{
 }> = [
   { value: "overview", label: "Operations Brief", icon: <Activity /> },
   { value: "explorer", label: "Risk Explorer", icon: <MapPinned /> },
+  { value: "scenario", label: "Scenario Lab", icon: <SlidersHorizontal /> },
   { value: "districts", label: "District Command", icon: <Building2 /> },
   { value: "priority", label: "Priority Queue", icon: <ListChecks /> },
   { value: "prediction", label: "Model Serving", icon: <Play /> },

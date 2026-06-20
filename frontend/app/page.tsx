@@ -51,6 +51,7 @@ import { CopilotPanel } from "@/components/dashboard/copilot-panel"
 import { KnowledgeLibrary } from "@/components/dashboard/knowledge-library"
 import { DistrictCommandPanel, PriorityQueuePanel } from "@/components/dashboard/decision-panels"
 import { RiskExplorer } from "@/components/dashboard/risk-explorer"
+import { ScenarioLab } from "@/components/dashboard/scenario-lab"
 import {
   MetricGrid,
   MonitoringPanel,
@@ -462,6 +463,15 @@ export default function Home() {
                   onSelectLocation={setSelectedRecordId}
                   onPredictLocation={handlePredictLocation}
                   onSubmitFeedback={handleSubmitFeedback}
+                />
+              ) : null}
+
+              {activeView === "scenario" ? (
+                <ScenarioLab
+                  locations={locations}
+                  selectedLocation={selectedLocation}
+                  onSelectLocation={setSelectedRecordId}
+                  onOperationsRefresh={refreshOperations}
                 />
               ) : null}
 

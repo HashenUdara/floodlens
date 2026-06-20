@@ -1,3 +1,5 @@
+import type { Feature, Polygon } from "geojson"
+
 export type ModelInfo = {
   model_version: string
   trained_at: string
@@ -18,6 +20,7 @@ export type MonitoringSummary = {
   total_predictions: number
   single_prediction_count: number
   batch_prediction_count: number
+  scenario_prediction_count: number
   batch_run_count: number
   latest_batch_id: string | null
   low_risk_count: number
@@ -215,6 +218,53 @@ export type BatchPredictResponse = {
   predictions: BatchPrediction[]
 }
 
+export type ScenarioContext = {
+  inside_sri_lanka: boolean
+  latitude: number
+  longitude: number
+  district: string
+  place_name: string
+  context_source: string
+  warnings: string[]
+  context: ScenarioOverrides
+  boundary: Feature<Polygon>
+}
+
+export type ScenarioOverrides = {
+  rainfall_7d_mm?: number
+  monthly_rainfall_mm?: number
+  elevation_m?: number
+  distance_to_river_m?: number
+  nearest_evac_km?: number
+  population_density_per_km2?: number
+  historical_flood_count?: number
+  infrastructure_score?: number
+}
+
+export type ScenarioResult = {
+  scenario_id: string
+  record_id: string
+  district: string
+  place_name: string
+  latitude: number
+  longitude: number
+  baseline_risk_score: number
+  baseline_risk_level: "Low" | "Medium" | "High"
+  simulated_baseline_risk_score: number
+  model_flood_risk_score: number
+  scenario_risk_score: number
+  scenario_risk_level: "Low" | "Medium" | "High"
+  score_delta: number
+  risk_level_delta: string
+  changed_fields: string[]
+  risk_drivers: string[]
+  operational_priority: "Routine" | "Watch" | "Elevated" | "Critical"
+  recommended_action: string
+  model_version: string
+  context_source: string
+  scenario_record: Record<string, unknown>
+}
+
 export type ApiHealth = {
   status: string
   service: string
@@ -290,6 +340,47 @@ export function predictFloodRisk(record: Record<string, unknown>) {
     method: "POST",
     body: JSON.stringify({ record }),
   })
+}
+
+export function getScenarioContext(payload: {
+  latitude: number
+  longitude: number
+  district?: string
+  place_name?: string
+}) {
+  return request<ScenarioContext>("/scenario/context", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export function simulateScenario(payload: {
+  record_id?: string
+  location?: Record<string, unknown>
+  overrides?: ScenarioOverrides
+}) {
+  return request<ScenarioResult>("/scenario/simulate", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function downloadActionReport(payload: {
+  scenario: ScenarioResult
+  citations?: Array<Record<string, unknown>>
+}) {
+  const response = await fetch(`${API_BASE_URL}/reports/action`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload),
+  })
+
+  if (!response.ok) {
+    const detail = await response.text()
+    throw new Error(detail || `Request failed with ${response.status}`)
+  }
+
+  return response.blob()
 }
 
 export function batchPredict(params?: {

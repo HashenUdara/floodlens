@@ -87,7 +87,7 @@ export function MetricGrid({
         icon={<DatabaseZap />}
         label="Predictions"
         value={monitoring?.total_predictions ?? 0}
-        detail={`${monitoring?.single_prediction_count ?? 0} single / ${monitoring?.batch_prediction_count ?? 0} batch`}
+        detail={`${monitoring?.single_prediction_count ?? 0} single / ${monitoring?.batch_prediction_count ?? 0} batch / ${monitoring?.scenario_prediction_count ?? 0} scenario`}
         loading={loading}
       />
       <MetricCard
@@ -413,6 +413,10 @@ export function MonitoringPanel({
                 <InfoRow
                   label="Batch predictions"
                   value={monitoring.batch_prediction_count.toLocaleString()}
+                />
+                <InfoRow
+                  label="Scenario predictions"
+                  value={(monitoring.scenario_prediction_count ?? 0).toLocaleString()}
                 />
                 <InfoRow
                   label="Batch runs"

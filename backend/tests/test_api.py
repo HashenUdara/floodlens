@@ -9,6 +9,9 @@ from app.services.feedback_service import FeedbackService, get_feedback_service
 from app.services.location_service import MonitoredLocationProvider, get_location_service
 from app.services.model_score_store import ModelScoreStore, get_model_score_store
 from app.services.prediction_log_service import PredictionLogService, get_prediction_log_service
+from app.services.geospatial_service import get_boundary_service
+from app.services.predictor_service import get_predictor_service
+from app.services.scenario_service import ScenarioService, get_scenario_service
 from app.services.system_monitoring_service import (
     SystemMonitoringService,
     get_system_monitoring_service,
@@ -22,6 +25,12 @@ client = TestClient(app)
 def temp_log_service(tmp_path):
     service = PredictionLogService(tmp_path / "predictions.jsonl")
     app.dependency_overrides[get_prediction_log_service] = lambda: service
+    app.dependency_overrides[get_scenario_service] = lambda: ScenarioService(
+        provider=get_location_service(),
+        predictor=get_predictor_service(),
+        log_service=service,
+        boundary_service=get_boundary_service(),
+    )
     yield service
     app.dependency_overrides.clear()
 
@@ -52,11 +61,18 @@ def temp_phase3_services(tmp_path):
         score_store=score_store,
         feedback_service=feedback_service,
     )
+    scenario_service = ScenarioService(
+        provider=provider,
+        predictor=get_predictor_service(),
+        log_service=log_service,
+        boundary_service=get_boundary_service(),
+    )
 
     app.dependency_overrides[get_prediction_log_service] = lambda: log_service
     app.dependency_overrides[get_model_score_store] = lambda: score_store
     app.dependency_overrides[get_feedback_service] = lambda: feedback_service
     app.dependency_overrides[get_drift_monitoring_service] = lambda: drift_service
+    app.dependency_overrides[get_scenario_service] = lambda: scenario_service
     yield log_service, score_store, feedback_service, drift_service
     app.dependency_overrides.clear()
 
@@ -141,6 +157,122 @@ def test_predict_rejects_missing_required_fields(temp_log_service):
     assert temp_log_service.read_events() == []
 
 
+def test_scenario_context_accepts_sri_lanka_coordinates():
+    response = client.post(
+        "/scenario/context",
+        json={"latitude": 6.9271, "longitude": 79.8612, "place_name": "Colombo scenario"},
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["inside_sri_lanka"] is True
+    assert body["district"] == "Colombo"
+    assert body["context_source"] == "manual_or_provider_default"
+    assert "boundary" in body
+    assert body["context"]["rainfall_7d_mm"] > 0
+
+
+def test_scenario_context_rejects_ocean_coordinates():
+    response = client.post(
+        "/scenario/context",
+        json={"latitude": 2.0, "longitude": 80.0},
+    )
+
+    assert response.status_code == 422
+    assert response.json()["detail"]["message"] == "Scenario coordinates must be inside Sri Lanka."
+
+
+def test_scenario_context_rejects_foreign_coordinates():
+    response = client.post(
+        "/scenario/context",
+        json={"latitude": 13.0827, "longitude": 80.2707},
+    )
+
+    assert response.status_code == 422
+
+
+def test_scenario_simulate_existing_record_logs_scenario_source(temp_log_service):
+    response = client.post(
+        "/scenario/simulate",
+        json={
+            "record_id": "F104559",
+            "overrides": {"rainfall_7d_mm": 180, "nearest_evac_km": 20},
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["record_id"] == "F104559"
+    assert 0 <= body["scenario_risk_score"] <= 1
+    assert body["scenario_risk_level"] in {"Low", "Medium", "High"}
+    assert body["score_delta"] is not None
+    assert "rainfall_7d_mm" in body["changed_fields"]
+    assert body["model_version"] == "flood-risk-v3"
+
+    events = temp_log_service.read_events()
+    assert len(events) == 1
+    assert events[0]["source"] == "scenario"
+    assert events[0]["record_id"] == "F104559"
+
+    summary = client.get("/monitoring/summary").json()
+    assert summary["total_predictions"] == 1
+    assert summary["scenario_prediction_count"] == 1
+
+
+def test_scenario_simulate_custom_location(temp_log_service):
+    response = client.post(
+        "/scenario/simulate",
+        json={
+            "location": {
+                "latitude": 7.2906,
+                "longitude": 80.6337,
+                "district": "Kandy",
+                "place_name": "Custom Kandy point",
+            },
+            "overrides": {
+                "rainfall_7d_mm": 140,
+                "monthly_rainfall_mm": 420,
+                "elevation_m": 35,
+                "distance_to_river_m": 450,
+                "nearest_evac_km": 9,
+                "population_density_per_km2": 1200,
+                "historical_flood_count": 2,
+                "infrastructure_score": 35,
+            },
+        },
+    )
+
+    assert response.status_code == 200
+    body = response.json()
+    assert body["record_id"] == "SCENARIO-CUSTOM"
+    assert body["district"] == "Kandy"
+    assert 0 <= body["scenario_risk_score"] <= 1
+    assert temp_log_service.read_events()[0]["source"] == "scenario"
+
+
+def test_action_report_returns_pdf(temp_phase3_services):
+    scenario_response = client.post(
+        "/scenario/simulate",
+        json={"record_id": "F104559", "overrides": {"rainfall_7d_mm": 150}},
+    )
+    assert scenario_response.status_code == 200
+
+    response = client.post(
+        "/reports/action",
+        json={"scenario": scenario_response.json(), "citations": []},
+    )
+
+    assert response.status_code == 200
+    assert response.headers["content-type"] == "application/pdf"
+    assert response.content.startswith(b"%PDF")
+
+
+def test_action_report_rejects_missing_scenario():
+    response = client.post("/reports/action", json={"citations": []})
+
+    assert response.status_code == 422
+
+
 def test_monitoring_summary_returns_empty_defaults(temp_log_service):
     response = client.get("/monitoring/summary")
 
@@ -149,6 +281,7 @@ def test_monitoring_summary_returns_empty_defaults(temp_log_service):
         "total_predictions": 0,
         "single_prediction_count": 0,
         "batch_prediction_count": 0,
+        "scenario_prediction_count": 0,
         "batch_run_count": 0,
         "latest_batch_id": None,
         "low_risk_count": 0,
@@ -215,6 +348,7 @@ def test_monitoring_summary_counts_logged_predictions(temp_log_service):
     assert body["total_predictions"] == 2
     assert body["single_prediction_count"] == 2
     assert body["batch_prediction_count"] == 0
+    assert body["scenario_prediction_count"] == 0
     assert body["batch_run_count"] == 0
     assert body["latest_batch_id"] is None
     assert body["medium_risk_count"] == 2
@@ -465,6 +599,7 @@ def test_monitoring_summary_tracks_single_and_batch_sources(temp_runtime_service
     assert body["total_predictions"] == 3
     assert body["single_prediction_count"] == 1
     assert body["batch_prediction_count"] == 2
+    assert body["scenario_prediction_count"] == 0
     assert body["batch_run_count"] == 1
     assert body["latest_batch_id"] == batch_id
 
