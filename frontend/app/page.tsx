@@ -40,6 +40,7 @@ import { Badge } from "@/components/ui/badge"
 import {
   ALL_DISTRICTS,
   ActiveView,
+  AppMode,
   ApiState,
   ServedScore,
 } from "@/components/dashboard/types"
@@ -49,9 +50,14 @@ import {
 } from "@/components/dashboard/shell"
 import { CopilotPanel } from "@/components/dashboard/copilot-panel"
 import { KnowledgeLibrary } from "@/components/dashboard/knowledge-library"
-import { DistrictCommandPanel, PriorityQueuePanel } from "@/components/dashboard/decision-panels"
+import { DistrictCommandPanel } from "@/components/dashboard/decision-panels"
 import { RiskExplorer } from "@/components/dashboard/risk-explorer"
 import { ScenarioLab } from "@/components/dashboard/scenario-lab"
+import { ActionReportsPanel } from "@/components/dashboard/action-reports"
+import { BusinessPriorityList } from "@/components/dashboard/business-priority-list"
+import { CommandBriefing } from "@/components/dashboard/command-briefing"
+import { DeveloperToolsPanel } from "@/components/dashboard/developer-tools"
+import { ResponseDocuments } from "@/components/dashboard/response-documents"
 import {
   MetricGrid,
   MonitoringPanel,
@@ -64,7 +70,8 @@ import type { KnowledgeDocument } from "@/lib/documents"
 const initialPayload = JSON.stringify(sampleRecord, null, 2)
 
 export default function Home() {
-  const [activeView, setActiveView] = useState<ActiveView>("overview")
+  const [appMode, setAppMode] = useState<AppMode>("command")
+  const [activeView, setActiveView] = useState<ActiveView>("briefing")
   const [apiState, setApiState] = useState<ApiState>("checking")
   const [modelInfo, setModelInfo] = useState<ModelInfo | null>(null)
   const [monitoring, setMonitoring] = useState<MonitoringSummary | null>(null)
@@ -325,7 +332,8 @@ export default function Home() {
     if (nextDistrict) setDistrict(nextDistrict)
     setSearch(recordId)
     setSelectedRecordId(recordId)
-    setActiveView("explorer")
+    setAppMode("command")
+    setActiveView("risk-map")
   }
 
   async function handleSubmitFeedback(payload: {
@@ -355,8 +363,20 @@ export default function Home() {
 
   function handleAskDocument(document: KnowledgeDocument) {
     setCopilotDraft(
-      `Use the Knowledge Library document "${document.title}" (document ID ${document.id}) to summarize the operational guidance, then explain how it should be applied with FloodLens risk and priority evidence. Cite the document pages used.`
+      `Use the response document "${document.title}" (document ID ${document.id}) to summarize the operational guidance, then explain how it should be applied with FloodLens risk and priority evidence. Cite the document pages used.`
     )
+    setAppMode("command")
+    setActiveView("copilot")
+  }
+
+  function handleModeChange(nextMode: AppMode) {
+    setAppMode(nextMode)
+    setActiveView(nextMode === "command" ? "briefing" : "model-overview")
+  }
+
+  function handleDraftCopilot(prompt: string) {
+    setCopilotDraft(prompt)
+    setAppMode("command")
     setActiveView("copilot")
   }
 
@@ -365,19 +385,23 @@ export default function Home() {
       <div className="flex min-h-screen">
         <DashboardSidebar
           activeView={activeView}
+          appMode={appMode}
           apiState={apiState}
           modelVersion={modelInfo?.model_version}
           totalPredictions={monitoring?.total_predictions ?? 0}
           onChange={setActiveView}
+          onModeChange={handleModeChange}
         />
 
         <section className="flex min-w-0 flex-1 flex-col">
           <MobileHeader
             activeView={activeView}
+            appMode={appMode}
             apiState={apiState}
             modelVersion={modelInfo?.model_version}
             totalPredictions={monitoring?.total_predictions ?? 0}
             onChange={setActiveView}
+            onModeChange={handleModeChange}
           />
 
           <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-5 px-4 py-4 sm:px-6 lg:px-8">
@@ -391,33 +415,53 @@ export default function Home() {
                     <Waves className="size-3" />
                     FloodLens
                   </Badge>
-                  <Badge
-                    variant={apiState === "online" ? "secondary" : "destructive"}
-                    className="gap-1.5"
-                  >
-                    <RadioTower className="size-3" />
-                    API {apiState}
-                  </Badge>
-                  {modelInfo ? (
+                  {appMode === "ops" ? (
+                    <Badge
+                      variant={apiState === "online" ? "secondary" : "destructive"}
+                      className="gap-1.5"
+                    >
+                      <RadioTower className="size-3" />
+                      API {apiState}
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary">Command Center</Badge>
+                  )}
+                  {appMode === "ops" && modelInfo ? (
                     <Badge variant="outline" className="font-mono">
                       {modelInfo.model_version}
                     </Badge>
                   ) : null}
                 </div>
                 <h1 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-                  FloodLens Operations Command
+                  {appMode === "command"
+                    ? "FloodLens Command Center"
+                    : "FloodLens Model Ops"}
                 </h1>
                 <p className="mt-1 max-w-3xl text-sm text-muted-foreground">
-                  Business-ready flood intelligence for monitored communities,
-                  assets, and response planning across Sri Lanka.
+                  {appMode === "command"
+                    ? "Prioritize places, understand risk, plan scenarios, and prepare response evidence."
+                    : "Model serving, monitoring, feedback, drift, retrieval, and system readiness."}
                 </p>
               </div>
               <div className="grid grid-cols-2 gap-2 text-sm sm:flex">
                 <StatusPill label="Monitored places" value={locations.length.toString()} />
-                <StatusPill
-                  label="Logged events"
-                  value={`${monitoring?.total_predictions ?? 0}`}
-                />
+                {appMode === "command" ? (
+                  <StatusPill
+                    label="Need review"
+                    value={`${districtSummary.reduce(
+                      (total, summary) =>
+                        total +
+                        summary.critical_priority_count +
+                        summary.elevated_priority_count,
+                      0
+                    )}`}
+                  />
+                ) : (
+                  <StatusPill
+                    label="Logged events"
+                    value={`${monitoring?.total_predictions ?? 0}`}
+                  />
+                )}
               </div>
             </header>
 
@@ -430,7 +474,20 @@ export default function Home() {
             ) : null}
 
             <div className="flex flex-col gap-4">
-              {activeView === "overview" ? (
+              {activeView === "briefing" ? (
+                <CommandBriefing
+                  summaries={districtSummary}
+                  priorityLocations={emergencyPriority}
+                  highRiskLocations={highRiskLocations}
+                  monitoring={monitoring}
+                  loading={loadingDashboard || loadingDecision}
+                  onNavigate={setActiveView}
+                  onOpenLocation={handleOpenLocation}
+                  onDistrictChange={setDistrict}
+                />
+              ) : null}
+
+              {activeView === "model-overview" ? (
                 <>
                   <MetricGrid
                     modelInfo={modelInfo}
@@ -447,7 +504,7 @@ export default function Home() {
                 </>
               ) : null}
 
-              {activeView === "explorer" ? (
+              {activeView === "risk-map" ? (
                 <RiskExplorer
                   districts={districts}
                   district={district}
@@ -475,7 +532,27 @@ export default function Home() {
                 />
               ) : null}
 
-              {activeView === "districts" ? (
+              {activeView === "reports" ? (
+                <ActionReportsPanel
+                  summaries={districtSummary}
+                  priorityLocations={emergencyPriority}
+                  onNavigate={setActiveView}
+                  onOpenLocation={handleOpenLocation}
+                  onDraftCopilot={handleDraftCopilot}
+                />
+              ) : null}
+
+              {activeView === "response-documents" ? (
+                <ResponseDocuments
+                  onAskCopilot={handleAskDocument}
+                  onManageDocuments={() => {
+                    setAppMode("ops")
+                    setActiveView("knowledge-ops")
+                  }}
+                />
+              ) : null}
+
+              {activeView === "serving" ? (
                 <DistrictCommandPanel
                   district={district}
                   districts={districts}
@@ -491,22 +568,27 @@ export default function Home() {
                 />
               ) : null}
 
-              {activeView === "priority" ? (
-                <PriorityQueuePanel
+              {activeView === "priority-list" ? (
+                <BusinessPriorityList
                   district={district}
                   districts={districts}
                   priorityLocations={emergencyPriority}
-                  latestScores={latestModelScores}
                   loading={loadingDecision}
-                  batchScoring={batchScoring}
-                  batchStatus={batchStatus}
                   onDistrictChange={setDistrict}
-                  onBatchScore={handleBatchScore}
                   onOpenLocation={handleOpenLocation}
                 />
               ) : null}
 
-              {activeView === "prediction" ? (
+              {activeView === "feedback-drift" ? (
+                <MonitoringPanel
+                  monitoring={monitoring}
+                  feedbackSummary={feedbackSummary}
+                  driftSummary={driftSummary}
+                  systemMonitoring={systemMonitoring}
+                />
+              ) : null}
+
+              {activeView === "serving" ? (
                 <PredictionPanel
                   payload={payload}
                   prediction={prediction}
@@ -528,10 +610,18 @@ export default function Home() {
                 />
               ) : null}
 
-              {activeView === "knowledge" ? (
+              {activeView === "knowledge-ops" ? (
                 <KnowledgeLibrary
                   districts={districts}
                   onAskCopilot={handleAskDocument}
+                />
+              ) : null}
+
+              {activeView === "developer-tools" ? (
+                <DeveloperToolsPanel
+                  apiState={apiState}
+                  modelVersion={modelInfo?.model_version}
+                  systemMonitoring={systemMonitoring}
                 />
               ) : null}
 
@@ -539,7 +629,7 @@ export default function Home() {
                 <CopilotPanel
                   initialPrompt={copilotDraft}
                   onInitialPromptConsumed={() => setCopilotDraft(null)}
-                  onOpenKnowledge={() => setActiveView("knowledge")}
+                  onOpenKnowledge={() => setActiveView("response-documents")}
                 />
               ) : null}
             </div>

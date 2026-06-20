@@ -63,7 +63,6 @@ import {
   InfoLine,
   RiskBadge,
   riskMarkerClass,
-  ScoreStack,
 } from "@/components/dashboard/shared"
 import { FeedbackControls } from "@/components/dashboard/feedback-controls"
 import { cn } from "@/lib/utils"
@@ -133,10 +132,10 @@ export function RiskExplorer({
         <Card>
           <CardHeader className="gap-3">
             <div>
-              <CardTitle>Monitored places explorer</CardTitle>
+              <CardTitle>Risk Map</CardTitle>
               <CardDescription>
-                Explore operational places under watch, inspect risk drivers,
-                and run selected assets through the model API.
+                Explore places under watch, inspect risk reasons, and choose
+                the next action.
               </CardDescription>
             </div>
             <CardAction className="flex flex-wrap gap-2">
@@ -190,11 +189,11 @@ export function RiskExplorer({
 
             <Alert>
               <ShieldCheck className="size-4" />
-              <AlertTitle>Business layer active</AlertTitle>
+              <AlertTitle>Decision layer active</AlertTitle>
               <AlertDescription>
-                The current CSV is treated as a seed provider. The map uses
-                corrected district presentation coordinates, while risk drivers,
-                priority, and recommendations are computed before any model call.
+                Locations are normalized into monitored places. Map points use
+                corrected presentation coordinates while risk reasons, priority,
+                and recommendations stay tied to the underlying place record.
               </AlertDescription>
             </Alert>
 
@@ -402,11 +401,11 @@ function LocationInspector({
               {(prediction?.flood_risk_score ?? location.baseline_risk_score).toFixed(4)}
             </div>
             <div className="text-xs text-muted-foreground">
-              {prediction ? "Model-assisted score" : "Baseline signal score"}
+              {prediction ? "Current risk score" : "Baseline risk score"}
             </div>
           </div>
           <div className="text-right text-xs text-muted-foreground">
-            {prediction?.model_version ?? "provider baseline"}
+            {prediction ? "latest review" : "baseline"}
           </div>
         </div>
       </div>
@@ -468,7 +467,7 @@ function LocationInspector({
         disabled={predicting}
       >
         {predicting ? <Loader2 className="animate-spin" /> : <Play />}
-        Predict selected
+        Refresh risk
       </Button>
 
       {prediction?.record_id ? (
@@ -510,8 +509,8 @@ function RiskTable({
           Operational risk queue
         </CardTitle>
         <CardDescription>
-          Prioritize monitored places using baseline signals, then run the model
-          where a decision needs more confidence.
+          Prioritize monitored places using current risk signals and review
+          the places that need attention.
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -526,7 +525,7 @@ function RiskTable({
                 <TableHead className="text-right">Elevation</TableHead>
                 <TableHead className="text-right">River</TableHead>
                 <TableHead className="text-right">Evac</TableHead>
-                <TableHead>Baseline</TableHead>
+                <TableHead>Risk</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead className="text-right">Action</TableHead>
               </TableRow>
@@ -573,7 +572,7 @@ function RiskTable({
                         {formatCompact(location.nearest_evac_km)}
                       </TableCell>
                       <TableCell>
-                        <ScoreStack
+                        <BusinessRiskStack
                           baselineScore={location.baseline_risk_score}
                           baselineLevel={location.baseline_risk_level}
                           latestScore={prediction}
@@ -594,7 +593,7 @@ function RiskTable({
                           }}
                         >
                           {predicting ? <Loader2 className="animate-spin" /> : <Play />}
-                          Predict
+                          Refresh
                         </Button>
                       </TableCell>
                     </TableRow>
@@ -612,5 +611,28 @@ function RiskTable({
         </ScrollArea>
       </CardContent>
     </Card>
+  )
+}
+
+function BusinessRiskStack({
+  baselineScore,
+  baselineLevel,
+  latestScore,
+}: {
+  baselineScore: number
+  baselineLevel: LocationRow["baseline_risk_level"]
+  latestScore?: ServedScore
+}) {
+  const activeLevel = latestScore?.risk_level ?? baselineLevel
+  const activeScore = latestScore?.flood_risk_score ?? baselineScore
+
+  return (
+    <div className="min-w-32 space-y-1.5">
+      <RiskBadge level={activeLevel} />
+      <div className="grid gap-0.5 font-mono text-[11px] leading-4 text-muted-foreground">
+        <span>{activeScore.toFixed(4)}</span>
+        <span>{latestScore ? "latest review" : "baseline"}</span>
+      </div>
+    </div>
   )
 }

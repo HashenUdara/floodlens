@@ -2,16 +2,22 @@ import type { LatestModelScore, PredictionResult } from "@/lib/api"
 
 export type ApiState = "checking" | "online" | "offline"
 
+export type AppMode = "command" | "ops"
+
 export type ActiveView =
-  | "overview"
-  | "explorer"
+  | "briefing"
+  | "risk-map"
+  | "priority-list"
   | "scenario"
-  | "districts"
-  | "priority"
-  | "prediction"
-  | "monitoring"
-  | "knowledge"
+  | "reports"
+  | "response-documents"
   | "copilot"
+  | "model-overview"
+  | "serving"
+  | "monitoring"
+  | "feedback-drift"
+  | "knowledge-ops"
+  | "developer-tools"
 
 export type LocationFeatureProperties = {
   record_id: string

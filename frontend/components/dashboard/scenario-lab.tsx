@@ -159,7 +159,7 @@ export function ScenarioLab({
   function handleSearchRecord() {
     const match = locations.find((location) => location.record_id === recordSearch.trim())
     if (!match) {
-      setMessage("Record is not in the current visible location set. Use Risk Explorer filters to load it first.")
+      setMessage("Record is not in the current visible location set. Use Risk Map filters to load it first.")
       return
     }
     selectRecord(match)
@@ -482,32 +482,37 @@ function BoundaryLayer({ boundary }: { boundary: Feature<Polygon> }) {
 
   useEffect(() => {
     if (!map || !isLoaded) return
+    const mapInstance = map
     const sourceId = "scenario-boundary"
     const fillId = "scenario-boundary-fill"
     const lineId = "scenario-boundary-line"
 
-    if (!map.getSource(sourceId)) {
-      map.addSource(sourceId, { type: "geojson", data: boundary })
-      map.addLayer({
+    if (!mapInstance.getSource(sourceId)) {
+      mapInstance.addSource(sourceId, { type: "geojson", data: boundary })
+      mapInstance.addLayer({
         id: fillId,
         type: "fill",
         source: sourceId,
         paint: { "fill-color": "#06b6d4", "fill-opacity": 0.06 },
       })
-      map.addLayer({
+      mapInstance.addLayer({
         id: lineId,
         type: "line",
         source: sourceId,
         paint: { "line-color": "#67e8f9", "line-width": 1.5, "line-opacity": 0.75 },
       })
       return () => {
-        if (map.getLayer(lineId)) map.removeLayer(lineId)
-        if (map.getLayer(fillId)) map.removeLayer(fillId)
-        if (map.getSource(sourceId)) map.removeSource(sourceId)
+        try {
+          if (mapInstance.getLayer(lineId)) mapInstance.removeLayer(lineId)
+          if (mapInstance.getLayer(fillId)) mapInstance.removeLayer(fillId)
+          if (mapInstance.getSource(sourceId)) mapInstance.removeSource(sourceId)
+        } catch {
+          // MapLibre can dispose the style before React runs child cleanup.
+        }
       }
     }
 
-    const source = map.getSource(sourceId) as
+    const source = mapInstance.getSource(sourceId) as
       | { setData: (data: Feature<Polygon>) => void }
       | undefined
     source?.setData(boundary)

@@ -51,10 +51,10 @@ import {
 } from "@/components/ui/card"
 
 const SUGGESTIONS = [
-  "Which districts need attention first?",
+  "Which places need attention first?",
   "Why is F104559 risky?",
-  "Is retraining needed?",
-  "Generate a district action brief for Colombo.",
+  "Create an action brief for Colombo.",
+  "What does the response document recommend?",
 ]
 
 export function CopilotPanel({
@@ -100,8 +100,8 @@ export function CopilotPanel({
             Intelligent Copilot
           </CardTitle>
           <CardDescription>
-            Ask about risk, priorities, monitored places, model operations, or
-            indexed response documents.
+            Ask about risk, priorities, recommended actions, and response
+            documents in plain language.
           </CardDescription>
           <CardAction>
             <Button type="button" variant="outline" size="sm" onClick={onOpenKnowledge}>
@@ -117,7 +117,7 @@ export function CopilotPanel({
                   <ConversationEmptyState
                     icon={<Bot className="size-10" />}
                     title="Ask an operational question"
-                    description="The Copilot calls FloodLens tools before answering risk, priority, monitoring, feedback, or drift questions."
+                    description="The Copilot uses FloodLens evidence before answering risk, priority, action, or document questions."
                   />
                 ) : (
                   messages.map((message) => (
@@ -162,7 +162,7 @@ export function CopilotPanel({
                       setInput(event.currentTarget.value)
                       onInitialPromptConsumed?.()
                     }}
-                    placeholder="Ask about risk, priorities, model operations, or uploaded response documents..."
+                    placeholder="Ask about risk, priorities, actions, or response documents..."
                     className="min-h-20"
                   />
                 </PromptInputBody>
